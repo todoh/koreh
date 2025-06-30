@@ -20,20 +20,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Firebase and Database
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    
+
     // Application State Variables
-    let username = '', userId = '', currentRoomId = null, currentAvatar = 'ronin'; // Default avatar set to 'ronin'
+    let username = '', userId = '', currentRoomId = null, currentAvatar = 'ronin';
     let peerConnections = {}, dataChannels = {}, firebaseListeners = {};
-    let userRef = null, usersInRoomRefListener = null;
+    let roomUserRef = null; // Reference to the user's data in the current room
+    let persistentUserRef = null; // Reference to the user's persistent data
     let world = null;
 
     // DOM Elements
     const loginView = document.getElementById('login-view');
     const mainContainer = document.querySelector('.container');
     const usernameInput = document.getElementById('username-input');
+    const passwordInput = document.getElementById('password-input');
     const loginButton = document.getElementById('login-button');
+    const loginError = document.getElementById('login-error');
     const roomNameEl = document.getElementById('room-name');
     const usersInRoomList = document.getElementById('users-in-room');
+    const userListToggle = document.getElementById('user-list-toggle');
     const leaveRoomButton = document.getElementById('leave-room-button');
     const threejsContainer = document.getElementById('threejs-container');
     const zoomInButton = document.getElementById('zoom-in-button');
@@ -47,51 +51,100 @@ document.addEventListener('DOMContentLoaded', () => {
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
     
     // --- Event Listeners ---
-    loginButton.addEventListener('click', () => {
-        const name = usernameInput.value.trim();
-        if (name) {
-            username = name;
-            userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            loginView.style.display = 'none';
-            mainContainer.classList.add('active');
-            joinRoom('lobby');
-        }
-    });
-
+    loginButton.addEventListener('click', handleLogin);
     leaveRoomButton.addEventListener('click', logout);
-    
     zoomInButton.addEventListener('click', () => world?.zoomIn());
     zoomOutButton.addEventListener('click', () => world?.zoomOut());
-
-    // Avatar Modal Listeners
-    avatarButton.addEventListener('click', () => {
-        avatarModal.style.display = 'flex';
-    });
-    modalCloseButton.addEventListener('click', () => {
-        avatarModal.style.display = 'none';
-    });
-    avatarModal.addEventListener('click', (e) => { // Close on overlay click
-        if (e.target === avatarModal) {
-            avatarModal.style.display = 'none';
-        }
+    avatarButton.addEventListener('click', () => avatarModal.style.display = 'flex');
+    modalCloseButton.addEventListener('click', () => avatarModal.style.display = 'none');
+    avatarModal.addEventListener('click', (e) => {
+        if (e.target === avatarModal) avatarModal.style.display = 'none';
     });
     avatarOptions.addEventListener('click', (e) => {
         const option = e.target.closest('.avatar-option');
-        if (option && userRef) {
+        if (option && persistentUserRef) {
             const newAvatar = option.dataset.avatar;
             currentAvatar = newAvatar;
-            userRef.child('avatar').set(newAvatar);
-            if (world) {
-                world.setPlayerAvatar(newAvatar);
-            }
+            persistentUserRef.child('gameState/avatar').set(newAvatar); // Save to persistent data
+            if (world) world.setPlayerAvatar(newAvatar);
             avatarModal.style.display = 'none';
         }
     });
 
+    userListToggle.addEventListener('click', () => {
+        const isHidden = usersInRoomList.classList.toggle('hidden');
+        userListToggle.innerHTML = `Usuarios en la sala: ${isHidden ? '&#x25B6;' : '&#x25BC;'}`; // Toggle arrow icon
+    });
+
+    // Initialize user list as hidden
+    usersInRoomList.classList.add('hidden');
+    userListToggle.innerHTML = 'Usuarios en la sala: &#x25B6;';
+
 
     // --- Core Functions ---
-    function joinRoom(roomId) {
-        if (currentRoomId === roomId) return;
+
+    function handleLogin() {
+        const enteredUsername = usernameInput.value.trim();
+        const enteredPassword = passwordInput.value.trim();
+        loginError.style.display = 'none';
+
+        if (!enteredUsername || !enteredPassword) {
+            showError("Por favor, introduce usuario y contraseña.");
+            return;
+        }
+
+        persistentUserRef = db.ref('users/' + enteredUsername);
+        
+        persistentUserRef.once('value', snapshot => {
+            if (snapshot.exists()) {
+                // User exists, check password
+                const userData = snapshot.val();
+                if (userData.password === enteredPassword) {
+                    // Password correct, proceed to login
+                    loginSuccess(enteredUsername, userData.gameState);
+                } else {
+                    // Incorrect password
+                    showError("Contraseña incorrecta.");
+                }
+            } else {
+                // User does not exist, register new user
+                const initialGameState = {
+                    roomId: 'lobby',
+                    avatar: 'ronin',
+                    position: { x: 0, y: 1.75, z: 0 },
+                    inventory: {},
+                    stats: {}
+                };
+
+                persistentUserRef.set({
+                    password: enteredPassword,
+                    gameState: initialGameState
+                }).then(() => {
+                    loginSuccess(enteredUsername, initialGameState);
+                });
+            }
+        });
+    }
+
+    function loginSuccess(loggedInUsername, gameState) {
+        username = loggedInUsername;
+        userId = username; 
+        currentAvatar = gameState.avatar || 'ronin';
+        
+        loginView.style.display = 'none';
+        mainContainer.classList.add('active');
+
+        // Join the room the user was last in, passing the username for the label
+        joinRoom(gameState.roomId || 'lobby', gameState.position);
+    }
+    
+    function showError(message) {
+        loginError.textContent = message;
+        loginError.style.display = 'block';
+    }
+
+    function joinRoom(roomId, initialPosition) {
+        if (currentRoomId === roomId && !initialPosition) return;
         currentRoomId = roomId;
 
         if (!world) {
@@ -101,74 +154,108 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!roomData) return;
 
         roomNameEl.textContent = `Mundo: ${roomData.name}`;
+        // Pass the username to the world for the local player's name label
+        world.changeRoom(roomId, currentAvatar, username);
 
-        world.changeRoom(roomId, currentAvatar);
+        // Wait for world to be ready, then set position
+        setTimeout(() => {
+             if (world && world.player && initialPosition) {
+                world.player.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+            }
+        }, 500); // Small delay to ensure the world is initialized
+
+        // Reference to the user's presence in the specific room
+        roomUserRef = db.ref(`rooms/${currentRoomId}/users/${userId}`);
         
-        userRef = db.ref(`rooms/${currentRoomId}/users/${userId}`);
-        const initialPosition = world.getPlayerPosition();
-        userRef.set({ 
-            username: username, 
-            position: { x: initialPosition.x, y: initialPosition.y, z: initialPosition.z },
+        const presenceData = {
+            username: username,
             avatar: currentAvatar
-        });
-        userRef.onDisconnect().remove();
-        db.ref(`signaling/${userId}`).onDisconnect().remove();
+        };
 
+        roomUserRef.set(presenceData);
+        roomUserRef.onDisconnect().remove();
+
+        // Listen for other users and signaling
         listenForUsers();
+        listenForSignaling();
 
         db.ref(`rooms/${currentRoomId}/users`).once('value', snapshot => {
             const existingUsers = snapshot.val() || {};
             for (const peerId in existingUsers) {
                 if (peerId !== userId) {
+                    const pos = world.getPlayerPosition();
+                    roomUserRef.child('position').set({x: pos.x, y: pos.y, z: pos.z});
                     initPeerConnection(peerId, true);
-                    if (world) {
-                        world.addOrUpdateRemotePlayer(peerId, existingUsers[peerId]);
-                    }
                 }
             }
         });
     }
+    
+    function listenForSignaling() {
+         db.ref(`signaling/${userId}`).onDisconnect().remove();
+    }
+
 
     async function changeRoom(newRoomId) {
         if (currentRoomId === newRoomId || !currentRoomId) return;
+        
+        await savePlayerState();
+        
         await leaveCurrentRoom(false);
-        joinRoom(newRoomId);
+        joinRoom(newRoomId, { x: 0, y: 1.75, z: 0 }); // Enter new room at default position
     }
 
     async function logout() {
+        await savePlayerState();
         await leaveCurrentRoom(true);
         mainContainer.classList.remove('active');
         loginView.style.display = 'flex';
-        username = ''; userId = ''; usernameInput.value = '';
+        username = ''; userId = ''; usernameInput.value = ''; passwordInput.value = '';
+    }
+
+    async function savePlayerState() {
+        if (persistentUserRef && world && world.player) {
+            const currentPosition = world.getPlayerPosition();
+            await persistentUserRef.child('gameState').update({
+                roomId: currentRoomId,
+                position: {x: currentPosition.x, y: currentPosition.y, z: currentPosition.z },
+                avatar: currentAvatar
+            });
+        }
     }
     
     async function leaveCurrentRoom(isLoggingOut) {
         if (!currentRoomId) return;
 
-        if (userRef) {
-            if (isLoggingOut) await userRef.onDisconnect().cancel();
-            await userRef.remove();
+        if (roomUserRef) {
+            if (isLoggingOut) await roomUserRef.onDisconnect().cancel();
+            await roomUserRef.remove();
         }
-        if (usersInRoomRefListener) usersInRoomRefListener.off();
+        
+        db.ref(`rooms/${currentRoomId}/users`).off();
 
         Object.keys(peerConnections).forEach(peerId => {
             peerConnections[peerId]?.close();
-            firebaseListeners[peerId]?.forEach(l => l.ref.off(l.eventType, l.callback));
+            if (firebaseListeners[peerId]) {
+                firebaseListeners[peerId].forEach(l => l.ref.off(l.eventType, l.callback));
+            }
         });
 
-        if (userId) await db.ref(`signaling/${userId}`).remove();
+        if (isLoggingOut && userId) {
+            await db.ref(`signaling/${userId}`).remove();
+        }
         
         world?.dispose();
         world = null;
         
         peerConnections = {}; dataChannels = {}; firebaseListeners = {};
-        currentRoomId = null; userRef = null; usersInRoomRefListener = null;
+        currentRoomId = null; roomUserRef = null;
         usersInRoomList.innerHTML = '';
     }
 
     function listenForUsers() {
-        if (usersInRoomRefListener) usersInRoomRefListener.off();
         const usersRef = db.ref(`rooms/${currentRoomId}/users`);
+        usersRef.off();
 
         usersRef.on('value', snapshot => {
             const users = snapshot.val() || {};
@@ -183,16 +270,16 @@ document.addEventListener('DOMContentLoaded', () => {
         usersRef.on('child_added', snapshot => {
             const peerId = snapshot.key;
             const peerUser = snapshot.val();
-            if (peerId !== userId && world) {
-                world.addOrUpdateRemotePlayer(peerId, peerUser);
-                initPeerConnection(peerId, false);
+            if (peerId !== userId) {
+                 world.addOrUpdateRemotePlayer(peerId, peerUser);
+                 initPeerConnection(peerId, false);
             }
         });
         
         usersRef.on('child_changed', snapshot => {
             const peerId = snapshot.key;
             const peerData = snapshot.val();
-            if (peerId !== userId && world) {
+            if (peerId !== userId) {
                 world.addOrUpdateRemotePlayer(peerId, peerData);
             }
         });
@@ -205,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete peerConnections[peerId];
             }
             if(dataChannels[peerId]) delete dataChannels[peerId];
-            if (firebaseListeners[peerId]) {
+             if (firebaseListeners[peerId]) {
                 firebaseListeners[peerId].forEach(l => l.ref.off(l.eventType, l.callback));
                 delete firebaseListeners[peerId];
             }
@@ -213,9 +300,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- World Callbacks ---
-    function onPlayerMove(newPosition) {
-        if (userRef) {
-            userRef.child('position').set({ x: newPosition.x, y: newPosition.y, z: newPosition.z });
+    function onPlayerMove(position, quaternion) {
+        if (roomUserRef) {
+            roomUserRef.update({ 
+                position: { x: position.x, y: position.y, z: position.z },
+                quaternion: { _x: quaternion.x, _y: quaternion.y, _z: quaternion.z, _w: quaternion.w }
+            });
         }
     }
 
@@ -233,7 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pc.onicecandidate = e => {
             if (e.candidate) db.ref(`signaling/${peerId}/${userId}/iceCandidates`).push(e.candidate.toJSON());
         };
-
+        
         if (isInitiator) {
             const channel = pc.createDataChannel('data');
             setupDataChannel(peerId, channel);
@@ -268,11 +358,11 @@ document.addEventListener('DOMContentLoaded', () => {
         offerRef.on('value', offerCallback);
         firebaseListeners[peerId].push({ref: offerRef, eventType: 'value', callback: offerCallback});
 
-        const answerCallback = snapshot => {
+        const answerCallback = async snapshot => {
             if (!snapshot.val()) return;
             const pc = peerConnections[peerId];
             if (pc && pc.signalingState !== 'stable') {
-               pc.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
+               await pc.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
             }
         };
         answerRef.on('value', answerCallback);
@@ -280,6 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const iceCallback = snapshot => {
             if (!snapshot.val()) return;
+            snapshot.ref.remove(); 
             peerConnections[peerId]?.addIceCandidate(new RTCIceCandidate(snapshot.val()));
         };
         iceRef.on('child_added', iceCallback);

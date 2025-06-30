@@ -19,18 +19,24 @@
     <!-- Login view, shown initially -->
     <div id="login-view" class="view">
         <h1>Bienvenido al Mundo Virtual</h1>
-        <p>Elige un nombre de usuario para empezar.</p>
+        <p>Introduce tu usuario y contraseña para entrar o registrarte.</p>
         <input type="text" id="username-input" placeholder="Tu nombre de usuario...">
-        <button id="login-button">Entrar</button>
+        <input type="password" id="password-input" placeholder="Tu contraseña...">
+        <button id="login-button">Entrar / Registrarse</button>
+        <p id="login-error" class="error-message"></p>
     </div>
 
     <!-- Main container for the virtual world -->
     <div class="container">
         <div id="world-view" class="view">
-            <h2 id="room-name"></h2>
+            <h2 id="room-name" style="display: none;" ></h2>
             <!-- Container where the 3D scene will be rendered -->
             <div id="threejs-container"></div>
             
+     <div id="health-bar-container">
+                <div id="health-bar-level"></div>
+            </div>
+
             <!-- UI Overlays -->
             <div id="ui-overlay">
                 <!-- Avatar change button -->
@@ -43,12 +49,12 @@
                 </div>
                 <!-- Container for the list of users in the room -->
                 <div id="user-list-container">
-                    <h3>Usuarios en la sala:</h3>
+                    <h3 id="user-list-toggle">Usuarios en la sala:</h3>
                     <ul id="users-in-room"></ul>
                 </div>
             </div>
 
-            <button id="leave-room-button">Salir</button>
+            <button id="leave-room-button">Salir y Guardar</button>
         </div>
     </div>
 
@@ -109,12 +115,14 @@
         {
             "imports": {
                 "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
                 "./world.js": "./world.js"
             }
         }
     </script>
 
     <!-- Main application logic script -->
+         <script type="module" src="world-data.js"></script>
     <script type="module" src="main.js"></script>
 
 </body>

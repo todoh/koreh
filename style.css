@@ -38,6 +38,7 @@ body {
    border-radius: 12px;
    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
    text-align: center;
+   width: 350px;
 }
 
 /* General view styling */
@@ -55,13 +56,20 @@ h1, h2 {
 }
 
 /* Input field styling */
-input[type="text"] {
+input[type="text"], input[type="password"] {
     padding: 12px;
     border: 1px solid #ddd;
     border-radius: 8px;
     font-size: 16px;
     margin-bottom: 10px;
-    width: 250px;
+    width: 90%;
+}
+
+.error-message {
+    color: #dc3545;
+    margin-top: 10px;
+    height: 20px;
+    font-size: 14px;
 }
 
 /* Button styling */
@@ -74,6 +82,7 @@ button {
     font-size: 16px;
     cursor: pointer;
     transition: background-color 0.2s;
+    width: 100%;
 }
 
 button:hover {
@@ -146,6 +155,8 @@ button:disabled {
     margin-top: 0;
     padding-bottom: 5px;
     border-bottom: 1px solid #ccc;
+    cursor: pointer;
+    user-select: none; /* Prevent text selection on click */
 }
 
 #users-in-room {
@@ -155,6 +166,11 @@ button:disabled {
     overflow-y: auto;
     flex-grow: 1;
 }
+
+#users-in-room.hidden {
+    display: none;
+}
+
 
 #users-in-room li {
     padding: 4px 5px;
@@ -184,6 +200,7 @@ button:disabled {
     right: 10px;
     background-color: #dc3545;
     z-index: 1000 !important;
+    width: auto;
 }
 
 #leave-room-button:hover {
@@ -277,4 +294,39 @@ button:disabled {
     font-weight: bold;
     color: #333;
     font-size: 14px; /* Ajuste de fuente */
+}
+
+/* Health Bar Styling */
+#health-bar-container {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 250px;
+    height: 15px;
+    background-color: #000;
+    border: 2px solid #fff;
+    border-radius: 5px;
+    z-index: 102;
+    overflow: hidden;
+}
+
+#health-bar-level {
+    width: 100%; /* Full health */
+    height: 100%;
+    background-color: #fff;
+    transition: width 0.5s ease-in-out;
+}
+
+/* Player Name Label Styling */
+.player-label {
+    color: #FFF;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    text-shadow: 1px 1px 2px black;
 }
