@@ -15,11 +15,31 @@ export const assetLibrary = {
     grass: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/cesped.jpg',
     stone: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/roca.jpg',
     forest_floor: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/suelobosque.jpg',
-    sand: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/arena.jpg', // Nueva textura de arena
+    sand: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/arena.jpg',
     tree_1: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/arbol.png',
     bush_1: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/flor.png',
-    orange_box: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/caja.png'
+    orange_box: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/caja.png',
+    fountain: 'https://raw.githubusercontent.com/todoh/koreh/main/fuente.png',
+
+    // Items
+    water_bottle: 'https://raw.githubusercontent.com/todoh/koreh/main/botellaagua.png',
+    pine_seed: 'https://raw.githubusercontent.com/todoh/koreh/main/semillapino.png',
+    pine_sprout: 'https://raw.githubusercontent.com/todoh/koreh/main/brotepino.png',
+    welcome_note: 'https://raw.githubusercontent.com/todoh/koreh/main/notabienvenida.png'
 };
+
+// Data defining the properties of items
+export const itemData = {
+    'water_bottle': { name: 'Botella de Agua', placeable: false },
+    'pine_seed': { name: 'Semilla de Pino', placeable: true, type: 'active' },
+    'pine_sprout': { name: 'Brote de Pino', placeable: false }, // No se puede colocar directamente
+    'welcome_note': { 
+        name: 'Nota de Bienvenida', 
+        placeable: false,
+        action: { type: 'read', content: 'BIENVENID@ A KOREH.' }
+    }
+};
+
 
 // Data defining the different maps/rooms in the world
 export const mapData = {
@@ -30,7 +50,7 @@ export const mapData = {
         doors: [
             { to: 'dungeon', position: { x: 15, y: 2, z: 0 }, label: 'Al Calabozo' },
             { to: 'forest', position: { x: -15, y: 2, z: 0 }, label: 'Al Bosque' },
-            { to: 'smallRoom', position: { x: 0, y: 2, z: 15 }, label: 'A la Sala Pequeña' } // Nueva puerta a la sala pequeña
+            { to: 'smallRoom', position: { x: 0, y: 2, z: 15 }, label: 'A la Sala Pequeña' }
         ]
     },
     'dungeon': {
@@ -49,20 +69,20 @@ export const mapData = {
             { type: 'image', src: assetLibrary.tree_1, position: { x: -10, y: 5, z: -15 }, size: { w: 10, h: 10 } },
             { type: 'image', src: assetLibrary.tree_1, position: { x: 12, y: 5, z: 8 }, size: { w: 10, h: 10 } },
             { type: 'image', src: assetLibrary.bush_1, position: { x: 8, y: 1.5, z: 10 }, size: { w: 4, h: 3 } },
+            { type: 'interactiveObject', id: 'fountain', name: 'Fuente', src: assetLibrary.fountain, position: { x: 0, y: 2, z: 0 }, size: { w: 4, h: 4 } }
         ],
         doors: [{ to: 'lobby', position: { x: 0, y: 2, z: 15 }, label: 'Al Lobby' }]
     },
-    'smallRoom': { // Nueva sala pequeña
+    'smallRoom': {
         name: 'Sala Pequeña de Arena',
-        groundTexture: assetLibrary.sand, // Usando la nueva textura de arena
+        groundTexture: assetLibrary.sand,
         objects: [
-            // Paredes para hacerla "pequeña" visualmente
-            { type: 'box', color: 0x555555, position: { x: 0, y: 2.5, z: -10 }, size: { w: 20, h: 5, d: 1 } }, // Pared trasera
-            { type: 'box', color: 0x555555, position: { x: 0, y: 2.5, z: 10 }, size: { w: 20, h: 5, d: 1 } },  // Pared delantera
-            { type: 'box', color: 0x555555, position: { x: -10, y: 2.5, z: 0 }, size: { w: 1, h: 5, d: 20 } }, // Pared izquierda
-            { type: 'box', color: 0x555555, position: { x: 10, y: 2.5, z: 0 }, size: { w: 1, h: 5, d: 20 } },  // Pared derecha
-            { type: 'box', color: 0xaaaaaa, position: { x: 0, y: 1, z: 0 }, size: { w: 2, h: 2, d: 2 } } // Un objeto dentro de la sala
+            { type: 'box', color: 0x555555, position: { x: 0, y: 2.5, z: -10 }, size: { w: 20, h: 5, d: 1 } },
+            { type: 'box', color: 0x555555, position: { x: 0, y: 2.5, z: 10 }, size: { w: 20, h: 5, d: 1 } },
+            { type: 'box', color: 0x555555, position: { x: -10, y: 2.5, z: 0 }, size: { w: 1, h: 5, d: 20 } },
+            { type: 'box', color: 0x555555, position: { x: 10, y: 2.5, z: 0 }, size: { w: 1, h: 5, d: 20 } },
+            { type: 'box', color: 0xaaaaaa, position: { x: 0, y: 1, z: 0 }, size: { w: 2, h: 2, d: 2 } }
         ],
-        doors: [{ to: 'lobby', position: { x: 0, y: 2, z: -9 }, label: 'Volver al Lobby' }] // Puerta de salida
+        doors: [{ to: 'lobby', position: { x: 0, y: 2, z: -9 }, label: 'Volver al Lobby' }]
     }
 };

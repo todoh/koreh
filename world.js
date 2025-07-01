@@ -4,11 +4,12 @@ import { assetLibrary, mapData } from './world-data.js';
 
 // The World class encapsulates all Three.js logic
 export class World {
-    constructor(container, onPlayerMoveCallback, onDoorClickCallback, onPlayerClickCallback) {
+    constructor(container, onPlayerMoveCallback, onDoorClickCallback, onPlayerClickCallback, onInteractiveObjectClickCallback) {
         this.container = container;
         this.onPlayerMove = onPlayerMoveCallback;
         this.onDoorClick = onDoorClickCallback;
         this.onPlayerClick = onPlayerClickCallback;
+        this.onInteractiveObjectClick = onInteractiveObjectClickCallback;
 
         this.scene = null;
         this.camera = null;
@@ -27,6 +28,9 @@ export class World {
         this.minZoom = 4;
         this.maxZoom = 14;
         this.zoomSensitivity = 1;
+        
+        // The maximum distance to interact with an object.
+        this.interactionRadius = 5.0; 
 
         this.animationFrameId = null;
         this.textureLoader = new THREE.TextureLoader();
@@ -102,15 +106,23 @@ export class World {
     
     createObjectsFromMap(map) {
         map.objects.forEach(objData => {
+            let mesh;
             if (objData.type === 'box') {
-                const mesh = new THREE.Mesh(new THREE.BoxGeometry(objData.size.w, objData.size.h, objData.size.d), new THREE.MeshStandardMaterial({ color: objData.color }));
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(objData.size.w, objData.size.h, objData.size.d), new THREE.MeshStandardMaterial({ color: objData.color }));
                 mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                 this.scene.add(mesh);
             } else if (objData.type === 'image' && objData.src) {
                 const imageMaterial = new THREE.MeshBasicMaterial({ map: this.textureLoader.load(objData.src), transparent: true, side: THREE.DoubleSide });
-                const imageMesh = new THREE.Mesh(new THREE.PlaneGeometry(objData.size.w, objData.size.h), imageMaterial);
-                imageMesh.position.set(objData.position.x, objData.position.y, objData.position.z); 
-                this.scene.add(imageMesh);
+                mesh = new THREE.Mesh(new THREE.PlaneGeometry(objData.size.w, objData.size.h), imageMaterial);
+                mesh.position.set(objData.position.x, objData.position.y, objData.position.z); 
+                this.scene.add(mesh);
+            } else if (objData.type === 'interactiveObject' && objData.src) {
+                const material = new THREE.MeshBasicMaterial({ map: this.textureLoader.load(objData.src), transparent: true, side: THREE.DoubleSide });
+                mesh = new THREE.Mesh(new THREE.PlaneGeometry(objData.size.w, objData.size.h), material);
+                mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
+                mesh.userData = { isInteractive: true, id: objData.id, name: objData.name };
+                this.scene.add(mesh);
+                this.interactableObjects.push(mesh);
             }
         });
 
@@ -133,7 +145,7 @@ export class World {
     }
     
     onCanvasClick(event) {
-        if (!this.camera || !this.renderer) return;
+        if (!this.camera || !this.renderer || !this.player) return;
         const canvasBounds = this.renderer.domElement.getBoundingClientRect();
         this.mouse.x = ((event.clientX - canvasBounds.left) / canvasBounds.width) * 2 - 1;
         this.mouse.y = - ((event.clientY - canvasBounds.top) / canvasBounds.height) * 2 + 1;
@@ -142,16 +154,37 @@ export class World {
         const intersects = this.raycaster.intersectObjects(this.interactableObjects, true);
         if (intersects.length > 0) {
             const firstHit = intersects[0].object;
-             if (firstHit.userData.isLocalPlayer && this.onPlayerClick) {
+            const hitPoint = intersects[0].point;
+
+            // Calculate distance from player to the clicked object's center
+            const distance = this.player.position.distanceTo(firstHit.position);
+
+            if (firstHit.userData.isInteractive && this.onInteractiveObjectClick) {
+                if (distance <= this.interactionRadius) {
+                    this.onInteractiveObjectClick(firstHit.userData);
+                } else {
+                    console.log("Estás demasiado lejos para interactuar con " + firstHit.userData.name);
+                    // Aquí podrías mostrar un mensaje al usuario en el futuro
+                }
+                return;
+            }
+
+            if (firstHit.userData.isLocalPlayer && this.onPlayerClick) {
                 this.onPlayerClick();
                 return;
             }
+
             if (firstHit.userData.isDoor) {
-                this.onDoorClick(firstHit.userData);
+                if (distance <= this.interactionRadius) {
+                    this.onDoorClick(firstHit.userData);
+                } else {
+                     console.log("Estás demasiado lejos para usar la puerta.");
+                }
                 return;
             }
+
             if (firstHit.userData.isGround) {
-                this.localPlayerTargetPosition = intersects[0].point;
+                this.localPlayerTargetPosition = hitPoint;
                 this.localPlayerTargetPosition.y = this.player.position.y;
             }
         }

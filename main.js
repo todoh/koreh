@@ -1,5 +1,5 @@
 import { World } from './world.js';
-import { assetLibrary } from './world-data.js'; // Import assetLibrary to get avatar image URLs
+import { assetLibrary, itemData } from './world-data.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Firebase Configuration
@@ -25,12 +25,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Application State Variables
     let username = '', userId = '', currentRoomId = null, currentAvatar = 'ronin';
     let peerConnections = {}, dataChannels = {}, firebaseListeners = {};
-    let roomUserRef = null; // Reference to the user's data in the current room
-    let persistentUserRef = null; // Reference to the user's persistent data
+    let roomUserRef = null;
+    let persistentUserRef = null;
     let world = null;
     let playerStats = {
         level: 1, health: 100, maxHealth: 100, energy: 50, maxEnergy: 50, xp: 0, maxXp: 100
     };
+    let playerInventory = {};
 
     // DOM Elements
     const loginView = document.getElementById('login-view');
@@ -48,9 +49,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomOutButton = document.getElementById('zoom-out-button');
     const menuButton = document.getElementById('menu-button');
 
-    // Player Menu Modal
+    // Modals
     const playerMenuModal = document.getElementById('player-menu-modal');
+    const groundActionModal = document.getElementById('ground-action-modal');
+    const chatInputModal = document.getElementById('chat-input-modal');
+    const fountainModal = document.getElementById('fountain-modal');
+    const welcomeNoteModal = document.getElementById('welcome-note-modal');
+    const placeObjectModal = document.getElementById('place-object-modal');
+    const pineSeedModal = document.getElementById('pine-seed-modal');
+
+    // Modal Close Buttons
     const playerMenuCloseButton = document.getElementById('player-menu-close-button');
+    const groundActionCloseButton = document.getElementById('ground-action-close-button');
+    const chatInputCloseButton = document.getElementById('chat-input-close-button');
+    const fountainModalCloseButton = document.getElementById('fountain-modal-close-button');
+    const welcomeNoteCloseButton = document.getElementById('welcome-note-close-button');
+    const placeObjectCloseButton = document.getElementById('place-object-close-button');
+    const pineSeedCloseButton = document.getElementById('pine-seed-close-button');
+    
+    // Player Menu Elements
     const playerMenuTabButtons = document.querySelectorAll('#player-menu-tabs button');
     const playerMenuContentDivs = document.querySelectorAll('#player-menu-content .tab-content');
     const profileAvatarImg = document.getElementById('profile-avatar-img');
@@ -60,18 +77,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const profileEnergy = document.getElementById('profile-energy');
     const profileXp = document.getElementById('profile-xp');
     const avatarOptionsInMenu = document.getElementById('avatar-options-in-menu');
+    const inventoryItemsDiv = document.getElementById('inventory-items');
 
-    // Ground Action Modal
-    const groundActionModal = document.getElementById('ground-action-modal');
-    const groundActionCloseButton = document.getElementById('ground-action-close-button');
+    // Action Buttons
     const actionSpeakButton = document.getElementById('action-speak-button');
-    
-    // Chat Input Modal
-    const chatInputModal = document.getElementById('chat-input-modal');
-    const chatInputCloseButton = document.getElementById('chat-input-close-button');
-    const chatMessageInput = document.getElementById('chat-message-input');
+    const actionPlaceObjectButton = document.getElementById('action-place-button');
     const sendChatButton = document.getElementById('send-chat-button');
+    const getWaterButton = document.getElementById('action-get-water');
+    const doNothingButton = document.getElementById('action-do-nothing');
+    const waterSeedButton = document.getElementById('action-water-seed');
 
+    // Inputs
+    const chatMessageInput = document.getElementById('chat-message-input');
 
     // WebRTC Configuration
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -81,6 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
     leaveRoomButton.addEventListener('click', logout);
     zoomInButton.addEventListener('click', () => world?.zoomIn());
     zoomOutButton.addEventListener('click', () => world?.zoomOut());
+    menuButton.addEventListener('click', () => {
+        playerMenuModal.style.display = 'flex';
+        showPlayerMenuTab('profile');
+    });
 
     userListToggle.addEventListener('click', () => {
         const isHidden = usersInRoomList.classList.toggle('hidden');
@@ -89,15 +110,17 @@ document.addEventListener('DOMContentLoaded', () => {
     usersInRoomList.classList.add('hidden');
     userListToggle.innerHTML = 'Usuarios en la sala: &#x25B6;';
 
-    // Player Menu Modal Events
-    menuButton.addEventListener('click', () => {
-        playerMenuModal.style.display = 'flex';
-        showPlayerMenuTab('profile');
+    // Modal Close Handlers
+    [playerMenuModal, groundActionModal, chatInputModal, fountainModal, welcomeNoteModal, placeObjectModal, pineSeedModal].forEach(modal => {
+        if(modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.style.display = 'none';
+            });
+            const closeButton = modal.querySelector('.modal-close-button');
+            if (closeButton) closeButton.addEventListener('click', () => modal.style.display = 'none');
+        }
     });
-    playerMenuCloseButton.addEventListener('click', () => playerMenuModal.style.display = 'none');
-    playerMenuModal.addEventListener('click', (e) => {
-        if (e.target === playerMenuModal) playerMenuModal.style.display = 'none';
-    });
+
     playerMenuTabButtons.forEach(button => {
         button.addEventListener('click', () => showPlayerMenuTab(button.dataset.tab));
     });
@@ -105,30 +128,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const option = e.target.closest('.avatar-option');
         if (option && persistentUserRef) {
             currentAvatar = option.dataset.avatar;
-            // Update persistent data
             persistentUserRef.child('gameState/avatar').set(currentAvatar);
-            // Update local player visuals
             world?.setPlayerAvatar(currentAvatar);
-            // **MODIFICATION START**: Notify other players in the room about the avatar change
-            if (roomUserRef) {
-                roomUserRef.child('avatar').set(currentAvatar);
-            }
-            // **MODIFICATION END**
+            if (roomUserRef) roomUserRef.child('avatar').set(currentAvatar);
         }
     });
 
-    // Ground Action & Chat Modal Events
-    groundActionCloseButton.addEventListener('click', () => groundActionModal.style.display = 'none');
+    // Action Button Listeners
     actionSpeakButton.addEventListener('click', () => {
         groundActionModal.style.display = 'none';
         chatInputModal.style.display = 'flex';
         chatMessageInput.focus();
     });
-    chatInputCloseButton.addEventListener('click', () => chatInputModal.style.display = 'none');
+    actionPlaceObjectButton.addEventListener('click', showPlaceableItemsModal);
     sendChatButton.addEventListener('click', sendChatMessage);
-    chatMessageInput.addEventListener('keyup', (e) => {
-        if (e.key === 'Enter') sendChatMessage();
+    chatMessageInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') sendChatMessage(); });
+    getWaterButton.addEventListener('click', () => {
+        addItemToInventory('water_bottle', 1);
+        fountainModal.style.display = 'none';
     });
+    
+    // Inventory Click Handler
+    inventoryItemsDiv.addEventListener('click', handleInventoryClick);
 
 
     // --- Core Functions ---
@@ -154,8 +175,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     showError("Contraseña incorrecta.");
                 }
             } else {
+                // New user registration
+                const initialInventory = {
+                    'water_bottle': { count: 15 },
+                    'pine_seed': { count: 15 },
+                    'welcome_note': { count: 1 }
+                };
                 const initialGameState = {
-                    roomId: 'lobby', avatar: 'ronin', position: { x: 0, y: 1.75, z: 0 }, inventory: {},
+                    roomId: 'lobby', avatar: 'ronin', position: { x: 0, y: 1.75, z: 0 }, 
+                    inventory: initialInventory,
                     stats: { level: 1, health: 100, maxHealth: 100, energy: 50, maxEnergy: 50, xp: 0, maxXp: 100 }
                 };
                 persistentUserRef.set({ password: enteredPassword, gameState: initialGameState })
@@ -169,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
         userId = username; 
         currentAvatar = gameState.avatar || 'ronin';
         playerStats = gameState.stats || playerStats;
+        playerInventory = gameState.inventory || {};
         
         loginView.style.display = 'none';
         mainContainer.classList.add('active');
@@ -186,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentRoomId = roomId;
 
         if (!world) {
-            world = new World(threejsContainer, onPlayerMove, onDoorClicked, onPlayerClicked);
+            world = new World(threejsContainer, onPlayerMove, onDoorClicked, onPlayerClicked, onInteractiveObjectClick);
         }
         const roomData = world.getMapData(roomId);
         if (!roomData) return;
@@ -246,7 +275,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 roomId: currentRoomId,
                 position: {x: currentPosition.x, y: currentPosition.y, z: currentPosition.z },
                 avatar: currentAvatar,
-                stats: playerStats
+                stats: playerStats,
+                inventory: playerInventory
             });
         }
     }
@@ -311,7 +341,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } else { 
                  if (peerData.chatMessage && world.player) {
                     world.displayChatMessage(world.player, peerData.chatMessage.text);
-                    // Remove the chat message after displaying it to prevent re-triggering
                     roomUserRef.child('chatMessage').remove();
                  }
             }
@@ -348,8 +377,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function onPlayerClicked() {
         groundActionModal.style.display = 'flex';
+        // Enable place object button if there are placeable items
+        const hasPlaceable = Object.keys(playerInventory).some(id => itemData[id]?.placeable);
+        actionPlaceObjectButton.disabled = !hasPlaceable;
     }
 
+    function onInteractiveObjectClick(objectData) {
+        if (objectData.id === 'fountain') {
+            fountainModal.style.display = 'flex';
+        } else if (objectData.isPlacedObject && objectData.itemId === 'pine_seed') {
+            // Logic for interacting with a placed pine seed
+            pineSeedModal.style.display = 'flex';
+            // We'll need to pass the unique ID of the clicked seed to the watering function
+            waterSeedButton.onclick = () => waterPineSeed(objectData.uniqueId);
+        }
+    }
+    
     // --- Chat Functionality ---
     function sendChatMessage() {
         const message = chatMessageInput.value.trim();
@@ -429,6 +472,119 @@ document.addEventListener('DOMContentLoaded', () => {
         firebaseListeners[peerId].push({ref: iceRef, eventType: 'child_added', callback: iceCallback});
     }
 
+    // --- Inventory & Item Management ---
+    function getItemName(itemId) {
+        return itemData[itemId]?.name || itemId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    function addItemToInventory(itemId, quantity) {
+        if (!playerInventory[itemId]) {
+            playerInventory[itemId] = { count: 0 };
+        }
+        playerInventory[itemId].count += quantity;
+        updateInventoryTab();
+        savePlayerState();
+    }
+
+    function removeItemFromInventory(itemId, quantity) {
+        if (playerInventory[itemId]) {
+            playerInventory[itemId].count -= quantity;
+            if (playerInventory[itemId].count <= 0) {
+                delete playerInventory[itemId];
+            }
+            updateInventoryTab();
+            savePlayerState();
+            return true;
+        }
+        return false;
+    }
+    
+    function handleInventoryClick(event) {
+        const itemDiv = event.target.closest('.inventory-item');
+        if (!itemDiv) return;
+
+        const itemId = itemDiv.dataset.itemId;
+        const data = itemData[itemId];
+
+        if (data && data.action?.type === 'read') {
+            const welcomeNoteText = document.getElementById('welcome-note-text');
+            welcomeNoteText.textContent = data.action.content;
+            welcomeNoteModal.style.display = 'flex';
+        }
+    }
+
+    function showPlaceableItemsModal() {
+        const placeableItemsContainer = document.getElementById('placeable-items-grid');
+        placeableItemsContainer.innerHTML = '';
+        
+        Object.keys(playerInventory).forEach(itemId => {
+            if (itemData[itemId]?.placeable) {
+                const item = playerInventory[itemId];
+                const itemAsset = assetLibrary[itemId];
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'inventory-item';
+                itemDiv.dataset.itemId = itemId;
+                itemDiv.innerHTML = `
+                    <img src="${itemAsset}" alt="${getItemName(itemId)}" onerror="this.src='https://placehold.co/80x80/555/fff?text=?'">
+                    <p class="item-name">${getItemName(itemId)}</p>
+                    <div class="item-count">${item.count}</div>
+                `;
+                itemDiv.onclick = () => placeObject(itemId);
+                placeableItemsContainer.appendChild(itemDiv);
+            }
+        });
+
+        groundActionModal.style.display = 'none';
+        placeObjectModal.style.display = 'flex';
+    }
+
+    function placeObject(itemId) {
+        if (!world.localPlayerTargetPosition) {
+            // In a real game, you'd provide feedback here
+            console.log("Selecciona una ubicación en el suelo primero.");
+            return;
+        }
+
+        if (removeItemFromInventory(itemId, 1)) {
+            const position = {
+                x: world.localPlayerTargetPosition.x,
+                y: 0.5, // Place on the ground
+                z: world.localPlayerTargetPosition.z
+            };
+
+            const newObjectData = {
+                itemId: itemId,
+                position: position,
+                state: 'default' // Initial state
+            };
+
+            // Save to a new 'world_objects' node for the room
+            db.ref(`rooms/${currentRoomId}/world_objects`).push(newObjectData);
+            placeObjectModal.style.display = 'none';
+        }
+    }
+    
+    function waterPineSeed(placedObjectKey) {
+        // Check if player has a water bottle
+        if (playerInventory['water_bottle'] && playerInventory['water_bottle'].count > 0) {
+            // Consume water bottle
+            removeItemFromInventory('water_bottle', 1);
+
+            // Update the placed object in Firebase
+            const objectRef = db.ref(`rooms/${currentRoomId}/world_objects/${placedObjectKey}`);
+            objectRef.update({
+                itemId: 'pine_sprout', // Change the item type
+                state: 'watered'
+            });
+
+            pineSeedModal.style.display = 'none';
+        } else {
+            // You can show a message to the user here
+            console.log("No tienes botellas de agua.");
+        }
+    }
+
+
     // --- Player Menu Tab Management ---
     function showPlayerMenuTab(tabName) {
         playerMenuTabButtons.forEach(button => button.classList.remove('active'));
@@ -443,8 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tabName === 'profile') {
             updateProfileTab();
         } else if (tabName === 'inventory') {
-            const inventoryItemsDiv = document.getElementById('inventory-items');
-            inventoryItemsDiv.innerHTML = '<p>Tu inventario está vacío. ¡Encuentra objetos en el mundo!</p>';
+            updateInventoryTab();
         }
     }
 
@@ -458,5 +613,30 @@ document.addEventListener('DOMContentLoaded', () => {
         profileHealth.textContent = `${playerStats.health}/${playerStats.maxHealth}`;
         profileEnergy.textContent = `${playerStats.energy}/${playerStats.maxEnergy}`;
         profileXp.textContent = `${playerStats.xp}/${playerStats.maxXp}`;
+    }
+
+    function updateInventoryTab() {
+        inventoryItemsDiv.innerHTML = '';
+
+        if (Object.keys(playerInventory).length === 0) {
+            inventoryItemsDiv.innerHTML = '<p>Tu inventario está vacío. ¡Encuentra objetos en el mundo!</p>';
+            return;
+        }
+
+        for (const itemId in playerInventory) {
+            const item = playerInventory[itemId];
+            const itemAsset = assetLibrary[itemId];
+            if (itemAsset) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'inventory-item';
+                itemDiv.dataset.itemId = itemId; // Store item ID
+                itemDiv.innerHTML = `
+                    <img src="${itemAsset}" alt="${getItemName(itemId)}" onerror="this.src='https://placehold.co/80x80/555/fff?text=?'">
+                    <p class="item-name">${getItemName(itemId)}</p>
+                    <div class="item-count">${item.count}</div>
+                `;
+                inventoryItemsDiv.appendChild(itemDiv);
+            }
+        }
     }
 });
