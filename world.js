@@ -4,10 +4,11 @@ import { assetLibrary, mapData } from './world-data.js';
 
 // The World class encapsulates all Three.js logic
 export class World {
-    constructor(container, onPlayerMoveCallback, onDoorClickCallback) {
+    constructor(container, onPlayerMoveCallback, onDoorClickCallback, onPlayerClickCallback) {
         this.container = container;
         this.onPlayerMove = onPlayerMoveCallback;
         this.onDoorClick = onDoorClickCallback;
+        this.onPlayerClick = onPlayerClickCallback;
 
         this.scene = null;
         this.camera = null;
@@ -30,6 +31,7 @@ export class World {
         this.animationFrameId = null;
         this.textureLoader = new THREE.TextureLoader();
         this.avatarTextures = {}; // Cache for avatar textures
+        this.activeChatBubbles = {}; // To manage chat bubble timeouts
 
         this.onWindowResize = this.onWindowResize.bind(this);
         this.onCanvasClick = this.onCanvasClick.bind(this);
@@ -85,8 +87,10 @@ export class World {
         this.createObjectsFromMap(map);
 
         this.player = this.createPlayerMesh(playerAvatar, playerName);
-        this.player.position.set(0, 1.75, 0); 
+        this.player.position.set(0, 2, 0); 
+        this.player.userData = { isLocalPlayer: true };
         this.scene.add(this.player);
+        this.interactableObjects.push(this.player);
 
         window.addEventListener('resize', this.onWindowResize);
         this.renderer.domElement.addEventListener('click', this.onCanvasClick);
@@ -138,6 +142,10 @@ export class World {
         const intersects = this.raycaster.intersectObjects(this.interactableObjects, true);
         if (intersects.length > 0) {
             const firstHit = intersects[0].object;
+             if (firstHit.userData.isLocalPlayer && this.onPlayerClick) {
+                this.onPlayerClick();
+                return;
+            }
             if (firstHit.userData.isDoor) {
                 this.onDoorClick(firstHit.userData);
                 return;
@@ -217,7 +225,7 @@ export class World {
         div.className = 'player-label';
         div.textContent = text;
         const label = new CSS2DObject(div);
-        label.position.set(0, 2.2, 0); // Position it above the player's head
+        label.position.set(0, 2.5, 0);
         return label;
     }
 
@@ -302,7 +310,7 @@ export class World {
                  remotePlayer.mesh.material.needsUpdate = true;
                  remotePlayer.mesh.userData.avatarName = peerData.avatar;
                  
-                 const playerHeight = 3.5;
+                 const playerHeight = 4;
                  const setAspectRatio = (tex) => {
                     if (tex.image) {
                         const aspectRatio = tex.image.width / tex.image.height;
@@ -316,6 +324,12 @@ export class World {
                  if (newTexture.image) { setAspectRatio(newTexture); }
                  else { newTexture.onLoad = setAspectRatio; }
             }
+            // Check for new chat messages
+            if (peerData.chatMessage && (!remotePlayer.lastMessageTimestamp || peerData.chatMessage.timestamp > remotePlayer.lastMessageTimestamp)) {
+                this.displayChatMessage(remotePlayer.mesh, peerData.chatMessage.text);
+                remotePlayer.lastMessageTimestamp = peerData.chatMessage.timestamp;
+            }
+
         } else {
             const mesh = this.createPlayerMesh(peerData.avatar, peerData.username);
             mesh.position.set(peerData.position.x, peerData.position.y, peerData.position.z);
@@ -326,9 +340,37 @@ export class World {
                 avatar: peerData.avatar,
                 username: peerData.username,
                 targetPosition: mesh.position.clone(),
-                targetQuaternion: mesh.quaternion.clone()
+                targetQuaternion: mesh.quaternion.clone(),
+                lastMessageTimestamp: 0
             };
         }
+    }
+
+    displayChatMessage(playerMesh, message) {
+        // If there's an existing bubble for this player, remove it first
+        if (playerMesh.userData.chatBubble) {
+            playerMesh.remove(playerMesh.userData.chatBubble);
+        }
+        if (playerMesh.userData.chatTimeout) {
+            clearTimeout(playerMesh.userData.chatTimeout);
+        }
+
+        const div = document.createElement('div');
+        div.className = 'chat-label';
+        div.textContent = message;
+        
+        const chatLabel = new CSS2DObject(div);
+        const playerHeight = playerMesh.geometry.parameters.height || 3.5;
+        chatLabel.position.set(0, playerHeight + 0.5, 0); // Position above the name label
+        
+        playerMesh.add(chatLabel);
+        playerMesh.userData.chatBubble = chatLabel;
+
+        // Remove the bubble after some time
+        playerMesh.userData.chatTimeout = setTimeout(() => {
+            playerMesh.remove(chatLabel);
+            playerMesh.userData.chatBubble = null;
+        }, 7000); // 7 seconds
     }
 
     removeRemotePlayer(peerId) {

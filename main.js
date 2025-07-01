@@ -1,4 +1,5 @@
 import { World } from './world.js';
+import { assetLibrary } from './world-data.js'; // Import assetLibrary to get avatar image URLs
 
 document.addEventListener('DOMContentLoaded', () => {
     // Firebase Configuration
@@ -27,6 +28,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let roomUserRef = null; // Reference to the user's data in the current room
     let persistentUserRef = null; // Reference to the user's persistent data
     let world = null;
+    let playerStats = {
+        level: 1, health: 100, maxHealth: 100, energy: 50, maxEnergy: 50, xp: 0, maxXp: 100
+    };
 
     // DOM Elements
     const loginView = document.getElementById('login-view');
@@ -42,10 +46,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const threejsContainer = document.getElementById('threejs-container');
     const zoomInButton = document.getElementById('zoom-in-button');
     const zoomOutButton = document.getElementById('zoom-out-button');
-    const avatarButton = document.getElementById('avatar-button');
-    const avatarModal = document.getElementById('avatar-modal');
-    const avatarOptions = document.getElementById('avatar-options');
-    const modalCloseButton = document.querySelector('.modal-close-button');
+    const menuButton = document.getElementById('menu-button');
+
+    // Player Menu Modal
+    const playerMenuModal = document.getElementById('player-menu-modal');
+    const playerMenuCloseButton = document.getElementById('player-menu-close-button');
+    const playerMenuTabButtons = document.querySelectorAll('#player-menu-tabs button');
+    const playerMenuContentDivs = document.querySelectorAll('#player-menu-content .tab-content');
+    const profileAvatarImg = document.getElementById('profile-avatar-img');
+    const profileUsername = document.getElementById('profile-username');
+    const profileLevel = document.getElementById('profile-level');
+    const profileHealth = document.getElementById('profile-health');
+    const profileEnergy = document.getElementById('profile-energy');
+    const profileXp = document.getElementById('profile-xp');
+    const avatarOptionsInMenu = document.getElementById('avatar-options-in-menu');
+
+    // Ground Action Modal
+    const groundActionModal = document.getElementById('ground-action-modal');
+    const groundActionCloseButton = document.getElementById('ground-action-close-button');
+    const actionSpeakButton = document.getElementById('action-speak-button');
+    
+    // Chat Input Modal
+    const chatInputModal = document.getElementById('chat-input-modal');
+    const chatInputCloseButton = document.getElementById('chat-input-close-button');
+    const chatMessageInput = document.getElementById('chat-message-input');
+    const sendChatButton = document.getElementById('send-chat-button');
+
 
     // WebRTC Configuration
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -55,30 +81,47 @@ document.addEventListener('DOMContentLoaded', () => {
     leaveRoomButton.addEventListener('click', logout);
     zoomInButton.addEventListener('click', () => world?.zoomIn());
     zoomOutButton.addEventListener('click', () => world?.zoomOut());
-    avatarButton.addEventListener('click', () => avatarModal.style.display = 'flex');
-    modalCloseButton.addEventListener('click', () => avatarModal.style.display = 'none');
-    avatarModal.addEventListener('click', (e) => {
-        if (e.target === avatarModal) avatarModal.style.display = 'none';
-    });
-    avatarOptions.addEventListener('click', (e) => {
-        const option = e.target.closest('.avatar-option');
-        if (option && persistentUserRef) {
-            const newAvatar = option.dataset.avatar;
-            currentAvatar = newAvatar;
-            persistentUserRef.child('gameState/avatar').set(newAvatar); // Save to persistent data
-            if (world) world.setPlayerAvatar(newAvatar);
-            avatarModal.style.display = 'none';
-        }
-    });
 
     userListToggle.addEventListener('click', () => {
         const isHidden = usersInRoomList.classList.toggle('hidden');
-        userListToggle.innerHTML = `Usuarios en la sala: ${isHidden ? '&#x25B6;' : '&#x25BC;'}`; // Toggle arrow icon
+        userListToggle.innerHTML = `Usuarios en la sala: ${isHidden ? '&#x25B6;' : '&#x25BC;'}`;
     });
-
-    // Initialize user list as hidden
     usersInRoomList.classList.add('hidden');
     userListToggle.innerHTML = 'Usuarios en la sala: &#x25B6;';
+
+    // Player Menu Modal Events
+    menuButton.addEventListener('click', () => {
+        playerMenuModal.style.display = 'flex';
+        showPlayerMenuTab('profile');
+    });
+    playerMenuCloseButton.addEventListener('click', () => playerMenuModal.style.display = 'none');
+    playerMenuModal.addEventListener('click', (e) => {
+        if (e.target === playerMenuModal) playerMenuModal.style.display = 'none';
+    });
+    playerMenuTabButtons.forEach(button => {
+        button.addEventListener('click', () => showPlayerMenuTab(button.dataset.tab));
+    });
+    avatarOptionsInMenu.addEventListener('click', (e) => {
+        const option = e.target.closest('.avatar-option');
+        if (option && persistentUserRef) {
+            currentAvatar = option.dataset.avatar;
+            persistentUserRef.child('gameState/avatar').set(currentAvatar);
+            world?.setPlayerAvatar(currentAvatar);
+        }
+    });
+
+    // Ground Action & Chat Modal Events
+    groundActionCloseButton.addEventListener('click', () => groundActionModal.style.display = 'none');
+    actionSpeakButton.addEventListener('click', () => {
+        groundActionModal.style.display = 'none';
+        chatInputModal.style.display = 'flex';
+        chatMessageInput.focus();
+    });
+    chatInputCloseButton.addEventListener('click', () => chatInputModal.style.display = 'none');
+    sendChatButton.addEventListener('click', sendChatMessage);
+    chatMessageInput.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') sendChatMessage();
+    });
 
 
     // --- Core Functions ---
@@ -97,31 +140,19 @@ document.addEventListener('DOMContentLoaded', () => {
         
         persistentUserRef.once('value', snapshot => {
             if (snapshot.exists()) {
-                // User exists, check password
                 const userData = snapshot.val();
                 if (userData.password === enteredPassword) {
-                    // Password correct, proceed to login
                     loginSuccess(enteredUsername, userData.gameState);
                 } else {
-                    // Incorrect password
                     showError("Contraseña incorrecta.");
                 }
             } else {
-                // User does not exist, register new user
                 const initialGameState = {
-                    roomId: 'lobby',
-                    avatar: 'ronin',
-                    position: { x: 0, y: 1.75, z: 0 },
-                    inventory: {},
-                    stats: {}
+                    roomId: 'lobby', avatar: 'ronin', position: { x: 0, y: 1.75, z: 0 }, inventory: {},
+                    stats: { level: 1, health: 100, maxHealth: 100, energy: 50, maxEnergy: 50, xp: 0, maxXp: 100 }
                 };
-
-                persistentUserRef.set({
-                    password: enteredPassword,
-                    gameState: initialGameState
-                }).then(() => {
-                    loginSuccess(enteredUsername, initialGameState);
-                });
+                persistentUserRef.set({ password: enteredPassword, gameState: initialGameState })
+                    .then(() => loginSuccess(enteredUsername, initialGameState));
             }
         });
     }
@@ -130,11 +161,11 @@ document.addEventListener('DOMContentLoaded', () => {
         username = loggedInUsername;
         userId = username; 
         currentAvatar = gameState.avatar || 'ronin';
+        playerStats = gameState.stats || playerStats;
         
         loginView.style.display = 'none';
         mainContainer.classList.add('active');
 
-        // Join the room the user was last in, passing the username for the label
         joinRoom(gameState.roomId || 'lobby', gameState.position);
     }
     
@@ -148,34 +179,25 @@ document.addEventListener('DOMContentLoaded', () => {
         currentRoomId = roomId;
 
         if (!world) {
-            world = new World(threejsContainer, onPlayerMove, onDoorClicked);
+            world = new World(threejsContainer, onPlayerMove, onDoorClicked, onPlayerClicked);
         }
         const roomData = world.getMapData(roomId);
         if (!roomData) return;
 
         roomNameEl.textContent = `Mundo: ${roomData.name}`;
-        // Pass the username to the world for the local player's name label
         world.changeRoom(roomId, currentAvatar, username);
 
-        // Wait for world to be ready, then set position
         setTimeout(() => {
-             if (world && world.player && initialPosition) {
+             if (world?.player && initialPosition) {
                 world.player.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
             }
-        }, 500); // Small delay to ensure the world is initialized
+        }, 500);
 
-        // Reference to the user's presence in the specific room
         roomUserRef = db.ref(`rooms/${currentRoomId}/users/${userId}`);
-        
-        const presenceData = {
-            username: username,
-            avatar: currentAvatar
-        };
-
+        const presenceData = { username, avatar: currentAvatar, stats: playerStats };
         roomUserRef.set(presenceData);
         roomUserRef.onDisconnect().remove();
 
-        // Listen for other users and signaling
         listenForUsers();
         listenForSignaling();
 
@@ -195,14 +217,11 @@ document.addEventListener('DOMContentLoaded', () => {
          db.ref(`signaling/${userId}`).onDisconnect().remove();
     }
 
-
     async function changeRoom(newRoomId) {
         if (currentRoomId === newRoomId || !currentRoomId) return;
-        
         await savePlayerState();
-        
         await leaveCurrentRoom(false);
-        joinRoom(newRoomId, { x: 0, y: 1.75, z: 0 }); // Enter new room at default position
+        joinRoom(newRoomId, { x: 0, y: 1.75, z: 0 });
     }
 
     async function logout() {
@@ -214,12 +233,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function savePlayerState() {
-        if (persistentUserRef && world && world.player) {
+        if (persistentUserRef && world?.player) {
             const currentPosition = world.getPlayerPosition();
             await persistentUserRef.child('gameState').update({
                 roomId: currentRoomId,
                 position: {x: currentPosition.x, y: currentPosition.y, z: currentPosition.z },
-                avatar: currentAvatar
+                avatar: currentAvatar,
+                stats: playerStats
             });
         }
     }
@@ -281,6 +301,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const peerData = snapshot.val();
             if (peerId !== userId) {
                 world.addOrUpdateRemotePlayer(peerId, peerData);
+            } else { 
+                 if (peerData.chatMessage && world.player) {
+                    world.displayChatMessage(world.player, peerData.chatMessage.text);
+                    // Remove the chat message after displaying it to prevent re-triggering
+                    roomUserRef.child('chatMessage').remove();
+                 }
             }
         });
         
@@ -311,6 +337,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function onDoorClicked(doorData) {
         changeRoom(doorData.to);
+    }
+
+    function onPlayerClicked() {
+        groundActionModal.style.display = 'flex';
+    }
+
+    // --- Chat Functionality ---
+    function sendChatMessage() {
+        const message = chatMessageInput.value.trim();
+        if (message && roomUserRef) {
+            const chatData = {
+                text: message,
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            };
+            roomUserRef.child('chatMessage').set(chatData);
+            
+            chatMessageInput.value = '';
+            chatInputModal.style.display = 'none';
+        }
     }
             
     // --- WebRTC Signaling ---
@@ -375,5 +420,36 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         iceRef.on('child_added', iceCallback);
         firebaseListeners[peerId].push({ref: iceRef, eventType: 'child_added', callback: iceCallback});
+    }
+
+    // --- Player Menu Tab Management ---
+    function showPlayerMenuTab(tabName) {
+        playerMenuTabButtons.forEach(button => button.classList.remove('active'));
+        playerMenuContentDivs.forEach(div => div.classList.remove('active'));
+
+        const selectedButton = document.querySelector(`#player-menu-tabs button[data-tab="${tabName}"]`);
+        const selectedContent = document.getElementById(`player-${tabName}-tab`);
+
+        if (selectedButton) selectedButton.classList.add('active');
+        if (selectedContent) selectedContent.classList.add('active');
+
+        if (tabName === 'profile') {
+            updateProfileTab();
+        } else if (tabName === 'inventory') {
+            const inventoryItemsDiv = document.getElementById('inventory-items');
+            inventoryItemsDiv.innerHTML = '<p>Tu inventario está vacío. ¡Encuentra objetos en el mundo!</p>';
+        }
+    }
+
+    function updateProfileTab() {
+        profileUsername.textContent = username;
+        profileAvatarImg.src = assetLibrary[currentAvatar] || assetLibrary.ronin;
+        profileAvatarImg.onerror = () => {
+            profileAvatarImg.src = `https://placehold.co/120x120/333/fff?text=${currentAvatar.charAt(0).toUpperCase() + currentAvatar.slice(1)}`;
+        };
+        profileLevel.textContent = playerStats.level;
+        profileHealth.textContent = `${playerStats.health}/${playerStats.maxHealth}`;
+        profileEnergy.textContent = `${playerStats.energy}/${playerStats.maxEnergy}`;
+        profileXp.textContent = `${playerStats.xp}/${playerStats.maxXp}`;
     }
 });
