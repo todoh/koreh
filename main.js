@@ -105,8 +105,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const option = e.target.closest('.avatar-option');
         if (option && persistentUserRef) {
             currentAvatar = option.dataset.avatar;
+            // Update persistent data
             persistentUserRef.child('gameState/avatar').set(currentAvatar);
+            // Update local player visuals
             world?.setPlayerAvatar(currentAvatar);
+            // **MODIFICATION START**: Notify other players in the room about the avatar change
+            if (roomUserRef) {
+                roomUserRef.child('avatar').set(currentAvatar);
+            }
+            // **MODIFICATION END**
         }
     });
 
