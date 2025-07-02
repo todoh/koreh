@@ -1,7 +1,7 @@
 /* General body styling */
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #f0f2f5;
+    background-color: #ffffff; /* Fondo de la página principal */
     color: #1c1e21;
     margin: 0;
     display: flex;
@@ -11,37 +11,62 @@ body {
     overflow: hidden;
 }
 
-/* Main container for the app */
+/* --- Fondos y Transiciones --- */
+
+#login-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    z-index: 1;
+    overflow: hidden;
+}
+
+/* Esfera de transición a prueba de fallos (solo con CSS) */
+#transition-sphere {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 3px;
+    height: 3px;
+    background-color: black;
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    z-index: 9999;
+    pointer-events: none;
+    display: none; 
+}
+
+/* Cuando el body tiene esta clase, la esfera se anima */
+body.game-loading #transition-sphere {
+    display: block; 
+    animation: growAndShrink 2s cubic-bezier(0.7, 0, 0.3, 1) forwards;
+}
+
+/* Animación de crecer y encogerse */
+@keyframes growAndShrink {
+  0% { transform: translate(-50%, -50%) scale(0); }
+  50% { transform: translate(-50%, -50%) scale(3000); }
+  100% { transform: translate(-50%, -50%) scale(0); }
+}
+
+
+/* --- Contenedores Principales --- */
+
 .container {
     width: 100%;
     height: 100%;
     background-color: #fff;
-    display: none; /* Hidden by default */
+    display: none; /* Oculto por defecto */
     flex-direction: column;
     overflow: hidden;
 }
 
-/* Active state for the container */
 .container.active {
     display: flex;
 }
 
-/* Login screen styling */
-#login-view {
-   display: flex;
-   flex-direction: column;
-   justify-content: center;
-   align-items: center;
-   height: auto;
-   background-color: #fff;
-   padding: 40px;
-   border-radius: 12px;
-   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-   text-align: center;
-   width: 350px;
-}
-
-/* General view styling */
 .view {
     padding: 0;
     display: flex;
@@ -50,12 +75,34 @@ body {
     width: 100%;
 }
 
-/* Headings styling */
-h1, h2, h3 { /* Added h3 */
-    color: #000000;
+
+/* --- Pantalla de Login --- */
+
+#login-view {
+   position: relative;
+   z-index: 10;
+   display: flex;
+   flex-direction: column;
+   justify-content: center;
+   align-items: center;
+   height: auto;
+   background: rgb(255, 255, 255);
+   backdrop-filter: blur(10px);
+   -webkit-backdrop-filter: blur(10px);
+   border: 1px solid rgba(255, 255, 255, 0.18);
+   padding: 40px;
+   color: #000;
+   border-radius: 12px;
+   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+   text-align: center;
+   width: 420px;
 }
 
-/* Input field styling */
+#login-view h1, #login-view p {
+    color: #000000;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+}
+
 input[type="text"], input[type="password"] {
     padding: 12px;
     border: 1px solid #ddd;
@@ -66,13 +113,20 @@ input[type="text"], input[type="password"] {
 }
 
 .error-message {
-    color: #dc3545;
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+    border-radius: 5px;
+    padding: 10px 15px;
     margin-top: 10px;
-    height: 20px;
     font-size: 14px;
+    width: 90%;
+    box-sizing: border-box;
 }
 
-/* Button styling */
+
+/* --- Botones --- */
+
 button {
     padding: 12px 20px;
     border: none;
@@ -94,14 +148,30 @@ button:disabled {
     cursor: not-allowed;
 }
 
-/* Virtual world view styling */
+
+/* --- Vista del Mundo y UI del Juego --- */
+
 #world-view {
     position: relative;
     width: 100%;
     height: 100%;
 }
 
-/* Room name display */
+#threejs-container {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    background-color: #000;
+}
+
+#threejs-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
 #room-name {
     position: absolute;
     top: 10px;
@@ -114,12 +184,11 @@ button:disabled {
     z-index: 100;
 }
 
-/* Menu Button Styling */
 #menu-button {
     position: absolute;
     bottom: 20px;
     left: 20px;
-    z-index: 101; /* Above canvas, below modals */
+    z-index: 101;
     width: 50px;
     height: 50px;
     font-size: 24px;
@@ -130,7 +199,19 @@ button:disabled {
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
-/* Container for all UI elements on top of the 3D view */
+#leave-room-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: #dc3545;
+    z-index: 1000 !important;
+    width: auto;
+}
+
+#leave-room-button:hover {
+    background-color: #c82333;
+}
+
 #ui-overlay {
     position: absolute;
     bottom: 20px;
@@ -140,7 +221,6 @@ button:disabled {
     align-items: flex-end;
 }
 
-/* User list container styling */
 #user-list-container {
     width: 250px;
     max-height: 300px;
@@ -159,7 +239,7 @@ button:disabled {
     padding-bottom: 5px;
     border-bottom: 1px solid #ccc;
     cursor: pointer;
-    user-select: none; /* Prevent text selection on click */
+    user-select: none;
 }
 
 #users-in-room {
@@ -173,7 +253,6 @@ button:disabled {
 #users-in-room.hidden {
     display: none;
 }
-
 
 #users-in-room li {
     padding: 4px 5px;
@@ -197,35 +276,56 @@ button:disabled {
     border-radius: 50%;
 }
 
-#leave-room-button {
+
+/* --- Elementos de UI (Labels y Barras) --- */
+
+#health-bar-container {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    background-color: #dc3545;
-    z-index: 1000 !important;
-    width: auto;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 250px;
+    height: 15px;
+    background-color: #000;
+    border: 2px solid #fff;
+    border-radius: 5px;
+    z-index: 102;
+    overflow: hidden;
 }
 
-#leave-room-button:hover {
-    background-color: #c82333;
-}
-
-#threejs-container {
+#health-bar-level {
     width: 100%;
     height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-    background-color: #000;
+    background-color: #fff;
+    transition: width 0.5s ease-in-out;
 }
 
-#threejs-container canvas {
-    width: 100% !important;
-    height: 100% !important;
-    display: block;
+.player-label, .chat-label {
+    color: #FFF;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    text-shadow: 1px 1px 2px black;
 }
 
-/* Modal Styling */
+.chat-label {
+    background: rgba(255, 255, 255, 0.85);
+    color: #000;
+    font-weight: bold;
+    padding: 8px 12px;
+    border-radius: 10px;
+    max-width: 200px;
+    white-space: normal;
+    text-align: center;
+}
+
+
+/* --- Modales --- */
+
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -253,7 +353,6 @@ button:disabled {
     max-height: 80vh;
 }
 
-/* Smaller modal variant */
 .modal-content.small-modal {
     max-width: 350px;
     padding: 25px;
@@ -280,90 +379,9 @@ button:disabled {
     color: #000;
 }
 
-/* Avatar options styling */
-.avatar-options {
-    display: flex;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 15px;
-    margin-top: 20px;
-}
 
-.avatar-option {
-    cursor: pointer;
-    padding: 10px;
-    border-radius: 10px;
-    transition: background-color 0.2s, transform 0.2s;
-    border: 2px solid transparent;
-    width: 110px;
-}
+/* --- Menú del Jugador (Dentro de Modal) --- */
 
-.avatar-option:hover {
-    background-color: #f0f2f5;
-    transform: translateY(-5px);
-}
-
-.avatar-option img {
-    width: 100px;
-    height: 100px;
-    object-fit: contain;
-}
-
-.avatar-option p {
-    margin-top: 10px;
-    font-weight: bold;
-    color: #333;
-    font-size: 14px;
-}
-
-/* Health Bar Styling */
-#health-bar-container {
-    position: absolute;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 250px;
-    height: 15px;
-    background-color: #000;
-    border: 2px solid #fff;
-    border-radius: 5px;
-    z-index: 102;
-    overflow: hidden;
-}
-
-#health-bar-level {
-    width: 100%; /* Full health */
-    height: 100%;
-    background-color: #fff;
-    transition: width 0.5s ease-in-out;
-}
-
-/* Player and Chat Label Styling */
-.player-label, .chat-label {
-    color: #FFF;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    white-space: nowrap;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    text-shadow: 1px 1px 2px black;
-}
-
-.chat-label {
-    background: rgba(255, 255, 255, 0.85);
-    color: #000;
-    font-weight: bold;
-    padding: 8px 12px;
-    border-radius: 10px;
-    max-width: 200px;
-    white-space: normal;
-    text-align: center;
-}
-
-
-/* Player Menu Specific Styling */
 #player-menu-modal .modal-content {
     max-width: 700px;
     padding: 0;
@@ -431,7 +449,9 @@ button:disabled {
     display: block;
 }
 
-/* Profile Tab Specific Styling */
+/* --- Pestañas del Menú --- */
+
+/* Pestaña de Perfil */
 #player-profile-tab .profile-info {
     display: flex;
     align-items: center;
@@ -442,12 +462,14 @@ button:disabled {
 }
 
 #player-profile-tab .profile-avatar {
-    width: 120px;
-    height: 320px;
+   top: 0%;
+   bottom: 0%;
+    left: 0%;
+    width: 400px;
+    height: 380px;
     border-radius: 0%;
-    object-fit: cover;
+    object-fit: contain;
     border: 0px solid #000000;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
 }
 
 #player-profile-tab .profile-stats {
@@ -461,8 +483,8 @@ button:disabled {
     margin: 5px 0;
 }
 
-/* Inventory Tab Specific Styling */
-#inventory-items {
+/* Pestaña de Inventario */
+.inventory-grid {
     margin-top: 20px;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
@@ -521,7 +543,7 @@ button:disabled {
     line-height: 1;
 }
 
-/* Settings Tab Specific Styling */
+/* Pestaña de Ajustes */
 #settings-options {
     margin-top: 20px;
     display: flex;
@@ -540,7 +562,83 @@ button:disabled {
     max-width: 300px;
 }
 
-/* Avatar Tab Specific Styling */
+/* Pestaña de Avatar */
 #player-avatar-tab .avatar-options {
     margin-top: 20px;
+}
+
+.avatar-options {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.avatar-option {
+    cursor: pointer;
+    padding: 10px;
+    border-radius: 10px;
+    transition: background-color 0.2s, transform 0.2s;
+    border: 2px solid transparent;
+    width: 110px;
+}
+
+.avatar-option:hover {
+    background-color: #f0f2f5;
+    transform: translateY(-5px);
+}
+
+.avatar-option img {
+    width: 100px;
+    height: 100px;
+    object-fit: contain;
+}
+
+.avatar-option p {
+    margin-top: 10px;
+    font-weight: bold;
+    color: #333;
+    font-size: 14px;
+}
+
+/* --- Modal de Construcción --- */
+
+#build-area-modal .modal-content {
+    max-width: 500px;
+}
+
+#build-size-options {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 20px 0;
+    width: 100%;
+}
+
+.build-size-option {
+    display: block;
+    padding: 10px 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    width: 95%;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.build-size-option:hover {
+    background-color: #f7f7f7;
+}
+
+.build-size-option input[type="radio"] {
+    margin-right: 10px;
+}
+
+.build-size-option input[type="radio"]:checked + label {
+    background-color: #e9ecef;
+    border-color: #000;
+}
+
+#confirm-build-button {
+    margin-top: 10px;
 }

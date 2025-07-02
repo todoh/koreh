@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Koreh Dev Versión</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚪</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>k</text></svg>">
     <meta property="og:title" content="Koreh Dev Version" />
     <meta property="og:description" content="AI Agent for Make Your Own MMO" />
     <meta property="og:image" content="https://raw.githubusercontent.com/todoh/koreh/main/baner.png" />
@@ -13,10 +13,13 @@
     <meta property="og:type" content="website" />
 </head>
 <body>
+    
+    <div id="login-background"></div>
 
-    <!-- Login view, shown initially -->
+    <div id="transition-sphere"></div>
+
     <div id="login-view" class="view">
-        <h1>K O R E H - v.0.1</h1>
+        <h1>K O R E H</h1>
         <p>Introduce tu usuario y contraseña para entrar o registrarte.</p>
         <input type="text" id="username-input" placeholder="Tu nombre de usuario...">
         <input type="password" id="password-input" placeholder="Tu contraseña...">
@@ -24,7 +27,6 @@
         <p id="login-error" class="error-message"></p>
     </div>
 
-    <!-- Main container for the virtual world -->
     <div class="container">
         <div id="world-view" class="view">
             <h2 id="room-name" style="display: none;" ></h2>
@@ -47,7 +49,6 @@
         </div>
     </div>
 
-    <!-- Player Menu Modal -->
     <div id="player-menu-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <span class="modal-close-button" id="player-menu-close-button">&times;</span>
@@ -98,7 +99,6 @@
         </div>
     </div>
 
-    <!-- Ground Action Modal -->
     <div id="ground-action-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content small-modal">
             <span class="modal-close-button" id="ground-action-close-button">&times;</span>
@@ -106,11 +106,55 @@
             <div class="action-buttons">
                 <button id="action-speak-button">Hablar</button>
                 <button id="action-place-button" disabled>Colocar Objeto</button>
+                <button id="action-build-button">Construir</button>
             </div>
         </div>
     </div>
 
-    <!-- Chat Input Modal -->
+    <div id="build-area-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <span class="modal-close-button" id="build-area-close-button">&times;</span>
+            <h3>Preparar Zona de Obras</h3>
+            <p>Elige el tamaño del área que quieres preparar. La zona debe estar despejada.</p>
+            <div id="build-size-options">
+                <label class="build-size-option">
+                    <input type="radio" name="build-size" value="3x3"> Pequeño (3x3)
+                </label>
+                <label class="build-size-option">
+                    <input type="radio" name="build-size" value="5x5"> Mediano (5x5)
+                </label>
+                <label class="build-size-option">
+                    <input type="radio" name="build-size" value="7x7"> Grande (7x7)
+                </label>
+                <label class="build-size-option">
+                    <input type="radio" name="build-size" value="14x7"> Gigante (14x7)
+                </label>
+            </div>
+            <p id="build-area-status" class="error-message" style="display: none;"></p>
+            <button id="confirm-build-button" disabled>Construir Zona</button>
+        </div>
+    </div>
+
+    <div id="construction-sign-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content small-modal">
+            <span class="modal-close-button" id="construction-sign-close-button">&times;</span>
+            <h3>Zona de Obras</h3>
+            <p>¿Qué te gustaría construir aquí?</p>
+            <div id="construction-options" class="action-buttons">
+            </div>
+        </div>
+    </div>
+
+    <div id="house-door-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content small-modal">
+            <span class="modal-close-button" id="house-door-close-button">&times;</span>
+            <h3 id="house-door-title">Puerta de la Casa</h3>
+            <p id="house-owner-info"></p>
+            <div id="house-door-options" class="action-buttons">
+            </div>
+        </div>
+    </div>
+
     <div id="chat-input-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content small-modal">
             <span class="modal-close-button" id="chat-input-close-button">&times;</span>
@@ -120,7 +164,6 @@
         </div>
     </div>
 
-    <!-- Fountain Interaction Modal -->
     <div id="fountain-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content small-modal">
             <span class="modal-close-button" id="fountain-modal-close-button">&times;</span>
@@ -133,7 +176,6 @@
         </div>
     </div>
 
-    <!-- Welcome Note Modal -->
     <div id="welcome-note-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content small-modal">
             <span class="modal-close-button" id="welcome-note-close-button">&times;</span>
@@ -142,19 +184,16 @@
         </div>
     </div>
 
-    <!-- Place Object Modal -->
     <div id="place-object-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <span class="modal-close-button" id="place-object-close-button">&times;</span>
             <h3>Colocar Objeto</h3>
             <p>Selecciona un objeto de tu inventario para colocarlo en el mundo.</p>
             <div id="placeable-items-grid" class="inventory-grid" style="margin-top: 20px;">
-                <!-- Placeable items will be loaded here -->
-            </div>
+                </div>
         </div>
     </div>
 
-    <!-- Pine Seed Interaction Modal -->
     <div id="pine-seed-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content small-modal">
             <span class="modal-close-button" id="pine-seed-close-button">&times;</span>
@@ -166,11 +205,37 @@
         </div>
     </div>
 
-    <!-- Firebase Libraries -->
+    <div id="pine-sprout-info-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content small-modal">
+            <span class="modal-close-button">&times;</span>
+            <h3>Brote de Pino</h3>
+            <p>Un brote de pino, pronto será un árbol.</p>
+        </div>
+    </div>
+
+    <div id="pine-action-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content small-modal">
+            <span class="modal-close-button">&times;</span>
+            <h3>Pino</h3>
+            <p>Es un pino robusto. ¿Qué quieres hacer?</p>
+            <div class="action-buttons">
+                <button id="action-chop-pine">Talar</button>
+                <button id="action-leave-pine">Nada</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content small-modal">
+            <span class="modal-close-button">&times;</span>
+            <h3 id="notification-title">Notificación</h3>
+            <p id="notification-text"></p>
+        </div>
+    </div>
+
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
-    <!-- Import Map for Three.js -->
     <script type="importmap">
         {
             "imports": {
@@ -183,6 +248,7 @@
 
     <script type="module" src="world-data.js"></script>
     <script type="module" src="main.js"></script>
+    <script type="module" src="login-sphere.js"></script>
 
 </body>
 </html>

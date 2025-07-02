@@ -11,78 +11,87 @@ export const assetLibrary = {
     pijo: 'https://raw.githubusercontent.com/todoh/koreh/main/pijo.png',
     chamana: 'https://raw.githubusercontent.com/todoh/koreh/main/chamana.png',
     
-    // Environment
+    // Environment Textures
     grass: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/cesped.jpg',
     stone: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/roca.jpg',
-    forest_floor: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/suelobosque.jpg',
-    sand: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/arena.jpg',
+    forest_floor: 'https://raw.githubusercontent.com/todoh/koreh/main/bosque.jpg',
+    sand: 'https://raw.githubusercontent.com/todoh/koreh/main/desierto.jpg',
+    mountain: 'https://raw.githubusercontent.com/todoh/koreh/main/montana.jpg',
+    savanna: 'https://raw.githubusercontent.com/todoh/koreh/main/sabana.jpg',
+    snow: 'https://raw.githubusercontent.com/todoh/koreh/main/nieve.jpg',
+
+    // Environment Objects
     tree_1: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/arbol.png',
     bush_1: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/flor.png',
     orange_box: 'https://raw.githubusercontent.com/todoh/koreh/refs/heads/main/caja.png',
     fountain: 'https://raw.githubusercontent.com/todoh/koreh/main/fuente.png',
+    obra: 'https://raw.githubusercontent.com/todoh/koreh/main/obra.png',
+    cartelobra: 'https://raw.githubusercontent.com/todoh/koreh/main/cartelobra.png',
+    pared: 'https://raw.githubusercontent.com/todoh/koreh/main/pared.png',
+    techo: 'https://raw.githubusercontent.com/todoh/koreh/main/techo.png',
+    puerta: 'https://raw.githubusercontent.com/todoh/koreh/main/puerta.png',
 
     // Items
     water_bottle: 'https://raw.githubusercontent.com/todoh/koreh/main/botellaagua.png',
     pine_seed: 'https://raw.githubusercontent.com/todoh/koreh/main/semillapino.png',
     pine_sprout: 'https://raw.githubusercontent.com/todoh/koreh/main/brotepino.png',
-    welcome_note: 'https://raw.githubusercontent.com/todoh/koreh/main/notabienvenida.png'
+    pine: 'https://raw.githubusercontent.com/todoh/koreh/main/pino.png',
+    welcome_note: 'https://raw.githubusercontent.com/todoh/koreh/main/notabienvenida.png',
+    hacha: 'https://raw.githubusercontent.com/todoh/koreh/main/hacha.png',
+    tronco_pino: 'https://raw.githubusercontent.com/todoh/koreh/main/troncopino.png'
 };
 
 // Data defining the properties of items
 export const itemData = {
     'water_bottle': { name: 'Botella de Agua', placeable: false },
-    'pine_seed': { name: 'Semilla de Pino', placeable: true, type: 'active' },
-    'pine_sprout': { name: 'Brote de Pino', placeable: false }, // No se puede colocar directamente
+    'pine_seed': { name: 'Semilla de Pino', placeable: true, type: 'active', size: { w: 0.5, h: 0.5 } },
+    'pine_sprout': { name: 'Brote de Pino', placeable: false, type: 'passive', size: { w: 0.8, h: 1.2 } },
+    'pine': { name: 'Pino', placeable: false, type: 'passive', size: { w: 4, h: 7 } },
     'welcome_note': { 
         name: 'Nota de Bienvenida', 
         placeable: false,
         action: { type: 'read', content: 'BIENVENID@ A KOREH.' }
-    }
+    },
+    'hacha': { name: 'Hacha', placeable: false },
+    'tronco_pino': { name: 'Tronco de Pino', placeable: false }
 };
 
-
-// Data defining the different maps/rooms in the world
-export const mapData = {
-    'lobby': {
+// Data defining the world as a grid of chunks
+export const worldGridData = {
+    // --- Central Lobby ---
+    "0_0": { 
         name: 'Lobby Principal',
-        groundTexture: assetLibrary.grass,
-        objects: [{ type: 'image', src: assetLibrary.orange_box, position: { x: -10, y: 1.5, z: -10 }, size: { w: 3, h: 3 } }],
-        doors: [
-            { to: 'dungeon', position: { x: 15, y: 2, z: 0 }, label: 'Al Calabozo' },
-            { to: 'forest', position: { x: -15, y: 2, z: 0 }, label: 'Al Bosque' },
-            { to: 'smallRoom', position: { x: 0, y: 2, z: 15 }, label: 'A la Sala Pequeña' }
-        ]
+        groundTextureKey: 'grass',
+        objects: [{ type: 'image', srcKey: 'orange_box', position: { x: -10, y: 1.5, z: -10 }, size: { w: 3, h: 3 } }]
     },
-    'dungeon': {
-        name: 'El Calabozo',
-        groundTexture: assetLibrary.stone,
-        objects: [
-             { type: 'box', color: 0x888888, position: { x: 5, y: 1, z: 10 }, size: { w: 4, h: 2, d: 2 } },
-             { type: 'box', color: 0x888888, position: { x: -5, y: 1, z: 10 }, size: { w: 4, h: 2, d: 2 } }
-        ],
-        doors: [{ to: 'lobby', position: { x: 0, y: 2, z: -15 }, label: 'Al Lobby' }]
-    },
-    'forest': {
-        name: 'Bosque Encantado',
-        groundTexture: assetLibrary.forest_floor,
-        objects: [
-            { type: 'image', src: assetLibrary.tree_1, position: { x: -10, y: 5, z: -15 }, size: { w: 10, h: 10 } },
-            { type: 'image', src: assetLibrary.tree_1, position: { x: 12, y: 5, z: 8 }, size: { w: 10, h: 10 } },
-            { type: 'image', src: assetLibrary.bush_1, position: { x: 8, y: 1.5, z: 10 }, size: { w: 4, h: 3 } },
-            { type: 'interactiveObject', id: 'fountain', name: 'Fuente', src: assetLibrary.fountain, position: { x: 0, y: 2, z: 0 }, size: { w: 4, h: 4 } }
-        ],
-        doors: [{ to: 'lobby', position: { x: 0, y: 2, z: 15 }, label: 'Al Lobby' }]
-    },
-    'smallRoom': {
-        name: 'Sala Pequeña de Arena',
-        groundTexture: assetLibrary.sand,
-        objects: [
-            { type: 'box', color: 0x555555, position: { x: 0, y: 2.5, z: -10 }, size: { w: 20, h: 5, d: 1 } },
-            { type: 'box', color: 0x555555, position: { x: 0, y: 2.5, z: 10 }, size: { w: 20, h: 5, d: 1 } },
-            { type: 'box', color: 0x555555, position: { x: -10, y: 2.5, z: 0 }, size: { w: 1, h: 5, d: 20 } },
-            { type: 'box', color: 0x555555, position: { x: 10, y: 2.5, z: 0 }, size: { w: 1, h: 5, d: 20 } },
-            { type: 'box', color: 0xaaaaaa, position: { x: 0, y: 1, z: 0 }, size: { w: 2, h: 2, d: 2 } }
-        ],
-        doors: [{ to: 'lobby', position: { x: 0, y: 2, z: -9 }, label: 'Volver al Lobby' }]
-    }
+
+    // --- Plains Biome (Grass) ---
+    "0_1": { name: 'Llanuras Verdes', groundTextureKey: 'grass', objects: [] },
+    "1_1": { name: 'Llanuras Verdes', groundTextureKey: 'grass', objects: [] },
+    "-1_1": { name: 'Llanuras Verdes', groundTextureKey: 'grass', objects: [] },
+
+    // --- Mountain Biome ---
+    "1_0": { name: 'Faldas de la Montaña', groundTextureKey: 'mountain', objects: [] },
+    "2_0": { name: 'Cima de la Montaña', groundTextureKey: 'mountain', objects: [] },
+    "2_1": { name: 'Ladera de la Montaña', groundTextureKey: 'mountain', objects: [] },
+
+    // --- Savanna Biome ---
+    "-1_0": { name: 'Sabana Calurosa', groundTextureKey: 'savanna', objects: [] },
+    "-2_0": { name: 'Corazón de la Sabana', groundTextureKey: 'savanna', objects: [] },
+    "-2_-1": { name: 'Sabana Calurosa', groundTextureKey: 'savanna', objects: [] },
+
+    // --- Snow Biome ---
+    "0_-1": { name: 'Tundra Helada', groundTextureKey: 'snow', objects: [] },
+    "1_-1": { name: 'Páramo Nevado', groundTextureKey: 'snow', objects: [] },
+    "-1_-1": { name: 'Ventisquero', groundTextureKey: 'snow', objects: [] },
+
+    // --- Desert Biome ---
+    "2_-2": { name: 'Dunas de Arena', groundTextureKey: 'sand', objects: [] },
+    "1_-2": { name: 'Desierto Solitario', groundTextureKey: 'sand', objects: [] },
+    "0_-2": { name: 'Mar de Arena', groundTextureKey: 'sand', objects: [] },
+
+    // --- Forest Biome ---
+    "-2_1": { name: 'Bosque Profundo', groundTextureKey: 'forest_floor', objects: [] },
+    "-1_2": { name: 'Claro del Bosque', groundTextureKey: 'forest_floor', objects: [] },
+    "-2_2": { name: 'Espesura del Bosque', groundTextureKey: 'forest_floor', objects: [] },
 };

@@ -1,8 +1,8 @@
 import { World } from './world.js';
-import { assetLibrary, itemData } from './world-data.js';
+import { assetLibrary, itemData, worldGridData } from './world-data.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Firebase Configuration
+    // --- Firebase Configuration ---
     const firebaseConfig = {
         apiKey: "AIzaSyB-F4x3YXyGv_awn72H3cDMXmL4_lrrXKY",
         authDomain: "koreh-9048b.firebaseapp.com",
@@ -22,18 +22,30 @@ document.addEventListener('DOMContentLoaded', () => {
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // Application State Variables
-    let username = '', userId = '', currentRoomId = null, currentAvatar = 'ronin';
-    let peerConnections = {}, dataChannels = {}, firebaseListeners = {};
-    let roomUserRef = null;
+    // --- NEW: Chunk Management Constants & State ---
+    const CHUNK_SIZE = 64; // World units (meters) for the size of each chunk
+    let currentChunkId = null; // Set to null to force initial load
+    let activeChunks = new Set();
+    let chunkUpdateInterval = null;
+    let firebaseChunkListeners = {}; // Stores all active firebase listeners, keyed by chunkId
+
+    // --- State Variables ---
+    let username = '', userId = '';
+    let currentAvatar = 'ronin';
     let persistentUserRef = null;
+    let selfUserRef = null; // Reference to the user's own data in the global list
     let world = null;
     let playerStats = {
         level: 1, health: 100, maxHealth: 100, energy: 50, maxEnergy: 50, xp: 0, maxXp: 100
     };
     let playerInventory = {};
+    let passiveObjectsInterval = null;
+    let selectedBuildSize = null;
+    let activeConstructionSiteId = null;
+    let activeHouseDoorData = null;
+    let lastClickedGroundPosition = null;
 
-    // DOM Elements
+    // --- DOM Elements ---
     const loginView = document.getElementById('login-view');
     const mainContainer = document.querySelector('.container');
     const usernameInput = document.getElementById('username-input');
@@ -48,26 +60,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomInButton = document.getElementById('zoom-in-button');
     const zoomOutButton = document.getElementById('zoom-out-button');
     const menuButton = document.getElementById('menu-button');
-
-    // Modals
     const playerMenuModal = document.getElementById('player-menu-modal');
     const groundActionModal = document.getElementById('ground-action-modal');
+    const buildAreaModal = document.getElementById('build-area-modal');
+    const constructionSignModal = document.getElementById('construction-sign-modal');
+    const houseDoorModal = document.getElementById('house-door-modal');
     const chatInputModal = document.getElementById('chat-input-modal');
     const fountainModal = document.getElementById('fountain-modal');
     const welcomeNoteModal = document.getElementById('welcome-note-modal');
     const placeObjectModal = document.getElementById('place-object-modal');
     const pineSeedModal = document.getElementById('pine-seed-modal');
-
-    // Modal Close Buttons
-    const playerMenuCloseButton = document.getElementById('player-menu-close-button');
-    const groundActionCloseButton = document.getElementById('ground-action-close-button');
-    const chatInputCloseButton = document.getElementById('chat-input-close-button');
-    const fountainModalCloseButton = document.getElementById('fountain-modal-close-button');
-    const welcomeNoteCloseButton = document.getElementById('welcome-note-close-button');
-    const placeObjectCloseButton = document.getElementById('place-object-close-button');
-    const pineSeedCloseButton = document.getElementById('pine-seed-close-button');
-    
-    // Player Menu Elements
+    const pineSproutInfoModal = document.getElementById('pine-sprout-info-modal');
+    const pineActionModal = document.getElementById('pine-action-modal');
+    const notificationModal = document.getElementById('notification-modal');
+    const notificationTitle = document.getElementById('notification-title');
+    const notificationText = document.getElementById('notification-text');
     const playerMenuTabButtons = document.querySelectorAll('#player-menu-tabs button');
     const playerMenuContentDivs = document.querySelectorAll('#player-menu-content .tab-content');
     const profileAvatarImg = document.getElementById('profile-avatar-img');
@@ -78,20 +85,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const profileXp = document.getElementById('profile-xp');
     const avatarOptionsInMenu = document.getElementById('avatar-options-in-menu');
     const inventoryItemsDiv = document.getElementById('inventory-items');
-
-    // Action Buttons
     const actionSpeakButton = document.getElementById('action-speak-button');
     const actionPlaceObjectButton = document.getElementById('action-place-button');
+    const actionBuildButton = document.getElementById('action-build-button');
+    const buildAreaSizeOptions = document.querySelectorAll('input[name="build-size"]');
+    const confirmBuildButton = document.getElementById('confirm-build-button');
+    const buildAreaStatus = document.getElementById('build-area-status');
+    const constructionOptionsDiv = document.getElementById('construction-options');
+    const houseOwnerInfo = document.getElementById('house-owner-info');
+    const houseDoorOptions = document.getElementById('house-door-options');
     const sendChatButton = document.getElementById('send-chat-button');
     const getWaterButton = document.getElementById('action-get-water');
-    const doNothingButton = document.getElementById('action-do-nothing');
     const waterSeedButton = document.getElementById('action-water-seed');
-
-    // Inputs
+    const chopPineButton = document.getElementById('action-chop-pine');
+    const leavePineButton = document.getElementById('action-leave-pine');
     const chatMessageInput = document.getElementById('chat-message-input');
-
-    // WebRTC Configuration
-    const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
     
     // --- Event Listeners ---
     loginButton.addEventListener('click', handleLogin);
@@ -102,22 +110,28 @@ document.addEventListener('DOMContentLoaded', () => {
         playerMenuModal.style.display = 'flex';
         showPlayerMenuTab('profile');
     });
-
     userListToggle.addEventListener('click', () => {
         const isHidden = usersInRoomList.classList.toggle('hidden');
-        userListToggle.innerHTML = `Usuarios en la sala: ${isHidden ? '&#x25B6;' : '&#x25BC;'}`;
+        userListToggle.innerHTML = `Usuarios en la zona: ${isHidden ? '&#x25B6;' : '&#x25BC;'}`;
     });
     usersInRoomList.classList.add('hidden');
-    userListToggle.innerHTML = 'Usuarios en la sala: &#x25B6;';
-
-    // Modal Close Handlers
-    [playerMenuModal, groundActionModal, chatInputModal, fountainModal, welcomeNoteModal, placeObjectModal, pineSeedModal].forEach(modal => {
+    userListToggle.innerHTML = 'Usuarios en la zona: &#x25B6;';
+    
+    [playerMenuModal, groundActionModal, buildAreaModal, constructionSignModal, houseDoorModal, chatInputModal, fountainModal, welcomeNoteModal, placeObjectModal, pineSeedModal, pineSproutInfoModal, pineActionModal, notificationModal].forEach(modal => {
         if(modal) {
             modal.addEventListener('click', (e) => {
-                if (e.target === modal) modal.style.display = 'none';
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                    if (modal === buildAreaModal) world?.clearBuildPreview();
+                }
             });
             const closeButton = modal.querySelector('.modal-close-button');
-            if (closeButton) closeButton.addEventListener('click', () => modal.style.display = 'none');
+            if (closeButton) {
+                closeButton.addEventListener('click', () => {
+                    modal.style.display = 'none';
+                    if (modal === buildAreaModal) world?.clearBuildPreview();
+                });
+            }
         }
     });
 
@@ -130,29 +144,42 @@ document.addEventListener('DOMContentLoaded', () => {
             currentAvatar = option.dataset.avatar;
             persistentUserRef.child('gameState/avatar').set(currentAvatar);
             world?.setPlayerAvatar(currentAvatar);
-            if (roomUserRef) roomUserRef.child('avatar').set(currentAvatar);
+            if (selfUserRef) selfUserRef.child('avatar').set(currentAvatar);
         }
     });
-
-    // Action Button Listeners
     actionSpeakButton.addEventListener('click', () => {
         groundActionModal.style.display = 'none';
         chatInputModal.style.display = 'flex';
         chatMessageInput.focus();
     });
     actionPlaceObjectButton.addEventListener('click', showPlaceableItemsModal);
+    actionBuildButton.addEventListener('click', () => {
+        groundActionModal.style.display = 'none';
+        buildAreaModal.style.display = 'flex';
+        confirmBuildButton.disabled = true;
+        buildAreaStatus.style.display = 'none';
+        buildAreaSizeOptions.forEach(radio => radio.checked = false);
+        selectedBuildSize = null;
+    });
     sendChatButton.addEventListener('click', sendChatMessage);
     chatMessageInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') sendChatMessage(); });
     getWaterButton.addEventListener('click', () => {
         addItemToInventory('water_bottle', 1);
         fountainModal.style.display = 'none';
     });
-    
-    // Inventory Click Handler
     inventoryItemsDiv.addEventListener('click', handleInventoryClick);
 
+    buildAreaSizeOptions.forEach(radio => {
+        radio.addEventListener('change', handleBuildSizeSelection);
+    });
+
+    confirmBuildButton.addEventListener('click', handleConfirmBuild);
 
     // --- Core Functions ---
+
+    function onGroundClicked(position) {
+        lastClickedGroundPosition = position;
+    }
 
     function handleLogin() {
         const enteredUsername = usernameInput.value.trim();
@@ -167,27 +194,38 @@ document.addEventListener('DOMContentLoaded', () => {
         persistentUserRef = db.ref('users/' + enteredUsername);
         
         persistentUserRef.once('value', snapshot => {
+            const performLogin = (gameState) => {
+                document.body.classList.add('game-loading');
+
+                setTimeout(() => {
+                    loginView.style.display = 'none';
+                    mainContainer.classList.add('active');
+                    loginSuccess(enteredUsername, gameState);
+
+                    setTimeout(() => {
+                        document.body.classList.remove('game-loading');
+                    }, 2000);
+
+                }, 700);
+            };
+
             if (snapshot.exists()) {
                 const userData = snapshot.val();
                 if (userData.password === enteredPassword) {
-                    loginSuccess(enteredUsername, userData.gameState);
+                    performLogin(userData.gameState);
                 } else {
                     showError("Contraseña incorrecta.");
                 }
             } else {
-                // New user registration
-                const initialInventory = {
-                    'water_bottle': { count: 15 },
-                    'pine_seed': { count: 15 },
-                    'welcome_note': { count: 1 }
-                };
+                const initialInventory = { 'welcome_note': { count: 1 }, 'hacha': { count: 1 }, 'water_bottle': { count: 1 }, 'pine_seed': { count: 5 } };
                 const initialGameState = {
-                    roomId: 'lobby', avatar: 'ronin', position: { x: 0, y: 1.75, z: 0 }, 
+                    position: { x: 0, y: 1.75, z: 0 }, 
+                    avatar: 'ronin',
                     inventory: initialInventory,
                     stats: { level: 1, health: 100, maxHealth: 100, energy: 50, maxEnergy: 50, xp: 0, maxXp: 100 }
                 };
                 persistentUserRef.set({ password: enteredPassword, gameState: initialGameState })
-                    .then(() => loginSuccess(enteredUsername, initialGameState));
+                    .then(() => performLogin(initialGameState));
             }
         });
     }
@@ -199,10 +237,32 @@ document.addEventListener('DOMContentLoaded', () => {
         playerStats = gameState.stats || playerStats;
         playerInventory = gameState.inventory || {};
         
-        loginView.style.display = 'none';
-        mainContainer.classList.add('active');
+        // Initialize the world
+        world = new World(threejsContainer, onPlayerMove, onInteractiveObjectClick, onPlayerClicked, onGroundClicked, CHUNK_SIZE);
+        world.init(currentAvatar, username, gameState.position);
 
-        joinRoom(gameState.roomId || 'lobby', gameState.position);
+        // Set up global user presence
+        selfUserRef = db.ref('online_users/' + userId);
+        const presenceData = { 
+            username, 
+            avatar: currentAvatar, 
+            stats: playerStats,
+            position: world.getPlayerPosition(),
+            chunkId: getChunkIdFromPosition(world.getPlayerPosition())
+        };
+        selfUserRef.set(presenceData);
+        selfUserRef.onDisconnect().remove();
+
+        // Start the chunk management loop
+        if (chunkUpdateInterval) clearInterval(chunkUpdateInterval);
+        chunkUpdateInterval = setInterval(checkForChunkChange, 1000); // Check every second
+        checkForChunkChange(); // Initial check
+
+        // Start passive object growth check
+        if (passiveObjectsInterval) clearInterval(passiveObjectsInterval);
+        passiveObjectsInterval = setInterval(checkPassiveObjectsGrowth, 5000);
+        
+        document.getElementById('login-background').style.display = 'none';
     }
     
     function showError(message) {
@@ -210,130 +270,159 @@ document.addEventListener('DOMContentLoaded', () => {
         loginError.style.display = 'block';
     }
 
-    function joinRoom(roomId, initialPosition) {
-        if (currentRoomId === roomId && !initialPosition) return;
-        currentRoomId = roomId;
-
-        if (!world) {
-            world = new World(threejsContainer, onPlayerMove, onDoorClicked, onPlayerClicked, onInteractiveObjectClick);
-        }
-        const roomData = world.getMapData(roomId);
-        if (!roomData) return;
-
-        roomNameEl.textContent = `Mundo: ${roomData.name}`;
-        world.changeRoom(roomId, currentAvatar, username);
-
-        setTimeout(() => {
-             if (world?.player && initialPosition) {
-                world.player.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
-            }
-        }, 500);
-
-        roomUserRef = db.ref(`rooms/${currentRoomId}/users/${userId}`);
-        const presenceData = { username, avatar: currentAvatar, stats: playerStats };
-        roomUserRef.set(presenceData);
-        roomUserRef.onDisconnect().remove();
-
-        listenForUsers();
-        listenForSignaling();
-
-        db.ref(`rooms/${currentRoomId}/users`).once('value', snapshot => {
-            const existingUsers = snapshot.val() || {};
-            for (const peerId in existingUsers) {
-                if (peerId !== userId) {
-                    const pos = world.getPlayerPosition();
-                    roomUserRef.child('position').set({x: pos.x, y: pos.y, z: pos.z});
-                    initPeerConnection(peerId, true);
-                }
-            }
-        });
-    }
-    
-    function listenForSignaling() {
-         db.ref(`signaling/${userId}`).onDisconnect().remove();
-    }
-
-    async function changeRoom(newRoomId) {
-        if (currentRoomId === newRoomId || !currentRoomId) return;
-        await savePlayerState();
-        await leaveCurrentRoom(false);
-        joinRoom(newRoomId, { x: 0, y: 1.75, z: 0 });
-    }
-
+    // --- MODIFIED LOGOUT FUNCTION ---
     async function logout() {
-        await savePlayerState();
-        await leaveCurrentRoom(true);
-        mainContainer.classList.remove('active');
-        loginView.style.display = 'flex';
-        username = ''; userId = ''; usernameInput.value = ''; passwordInput.value = '';
-    }
-
-    async function savePlayerState() {
+        // 1. Get the final player state BEFORE destroying anything.
         if (persistentUserRef && world?.player) {
-            const currentPosition = world.getPlayerPosition();
+            const finalPosition = world.getPlayerPosition();
+            // This is the save operation, now happening safely first.
             await persistentUserRef.child('gameState').update({
-                roomId: currentRoomId,
-                position: {x: currentPosition.x, y: currentPosition.y, z: currentPosition.z },
+                position: {x: finalPosition.x, y: finalPosition.y, z: finalPosition.z },
                 avatar: currentAvatar,
                 stats: playerStats,
                 inventory: playerInventory
             });
         }
-    }
-    
-    async function leaveCurrentRoom(isLoggingOut) {
-        if (!currentRoomId) return;
-
-        if (roomUserRef) {
-            if (isLoggingOut) await roomUserRef.onDisconnect().cancel();
-            await roomUserRef.remove();
-        }
         
-        db.ref(`rooms/${currentRoomId}/users`).off();
-
-        Object.keys(peerConnections).forEach(peerId => {
-            peerConnections[peerId]?.close();
-            if (firebaseListeners[peerId]) {
-                firebaseListeners[peerId].forEach(l => l.ref.off(l.eventType, l.callback));
-            }
+        // 2. Now, proceed with cleanup.
+        if (chunkUpdateInterval) clearInterval(chunkUpdateInterval);
+        
+        // Detach all firebase listeners and unload chunks
+        activeChunks.forEach(chunkId => {
+            stopListeningToChunk(chunkId);
+            if(world) world.unloadChunk(chunkId);
         });
+        activeChunks.clear();
 
-        if (isLoggingOut && userId) {
-            await db.ref(`signaling/${userId}`).remove();
+        if (selfUserRef) {
+            await selfUserRef.onDisconnect().cancel();
+            await selfUserRef.remove();
         }
-        
+
+        if (passiveObjectsInterval) clearInterval(passiveObjectsInterval);
+
         world?.dispose();
         world = null;
         
-        peerConnections = {}; dataChannels = {}; firebaseListeners = {};
-        currentRoomId = null; roomUserRef = null;
-        usersInRoomList.innerHTML = '';
+        // 3. Finally, reset the UI.
+        mainContainer.classList.remove('active');
+        loginView.style.display = 'flex';
+        document.getElementById('login-background').style.display = 'block';
+        username = ''; userId = ''; usernameInput.value = ''; passwordInput.value = '';
+        persistentUserRef = null;
+        selfUserRef = null;
+    }
+    
+    function onPlayerMove(position, quaternion) {
+        if (selfUserRef) {
+            const newChunkId = getChunkIdFromPosition(position);
+            selfUserRef.update({ 
+                position: { x: position.x, y: position.y, z: position.z },
+                quaternion: { _x: quaternion.x, _y: quaternion.y, _z: quaternion.z, _w: quaternion.w },
+                chunkId: newChunkId
+            });
+        }
     }
 
-    function listenForUsers() {
-        const usersRef = db.ref(`rooms/${currentRoomId}/users`);
-        usersRef.off();
+    // --- Chunk Management ---
 
-        usersRef.on('value', snapshot => {
-            const users = snapshot.val() || {};
-            usersInRoomList.innerHTML = '';
-            Object.entries(users).forEach(([id, user]) => {
-                const li = document.createElement('li');
-                li.textContent = `${user.username}${id === userId ? ' (Tú)' : ''}`;
-                usersInRoomList.appendChild(li);
+    function getChunkIdFromPosition(position) {
+        const chunkX = Math.floor((position.x + CHUNK_SIZE / 2) / CHUNK_SIZE);
+        const chunkZ = Math.floor((position.z + CHUNK_SIZE / 2) / CHUNK_SIZE);
+        return `${chunkX}_${chunkZ}`;
+    }
+
+    function checkForChunkChange() {
+        if (!world || !world.player) return;
+        const playerPos = world.getPlayerPosition();
+        const newChunkId = getChunkIdFromPosition(playerPos);
+
+        if (newChunkId !== currentChunkId) {
+            console.log(`Player moved from chunk ${currentChunkId} to ${newChunkId}`);
+            currentChunkId = newChunkId;
+            updateActiveChunks();
+        }
+    }
+
+    function updateActiveChunks() {
+        const [cx, cz] = currentChunkId.split('_').map(Number);
+        const requiredChunks = new Set();
+        
+        // Create 3x3 grid of required chunks
+        for (let x = -1; x <= 1; x++) {
+            for (let z = -1; z <= 1; z++) {
+                requiredChunks.add(`${cx + x}_${cz + z}`);
+            }
+        }
+
+        // Unload old chunks
+        for (const chunkId of activeChunks) {
+            if (!requiredChunks.has(chunkId)) {
+                console.log(`Unloading chunk: ${chunkId}`);
+                world.unloadChunk(chunkId);
+                stopListeningToChunk(chunkId);
+            }
+        }
+
+        // Load new chunks
+        for (const chunkId of requiredChunks) {
+            if (!activeChunks.has(chunkId)) {
+                console.log(`Loading chunk: ${chunkId}`);
+                const chunkData = worldGridData[chunkId];
+                if (chunkData) {
+                    world.loadChunk(chunkId, chunkData);
+                    startListeningToChunk(chunkId);
+                }
+            }
+        }
+
+        activeChunks = requiredChunks;
+        roomNameEl.textContent = `Zona: ${worldGridData[currentChunkId]?.name || 'Desconocido'}`;
+        roomNameEl.style.display = 'block';
+    }
+
+    function startListeningToChunk(chunkId) {
+        if (firebaseChunkListeners[chunkId]) return; // Already listening
+        firebaseChunkListeners[chunkId] = [];
+
+        listenForUsersInChunk(chunkId);
+        listenForWorldObjects(chunkId);
+        listenForConstructionSites(chunkId);
+    }
+
+    function stopListeningToChunk(chunkId) {
+        const listeners = firebaseChunkListeners[chunkId];
+        if (listeners) {
+            listeners.forEach(listener => {
+                listener.ref.off(listener.eventType, listener.callback);
             });
-        });
+        }
+        delete firebaseChunkListeners[chunkId];
 
-        usersRef.on('child_added', snapshot => {
+        if(world) world.removeRemotePlayersFromChunk(chunkId);
+    }
+
+    function addListener(chunkId, ref, eventType, callback) {
+        if (!firebaseChunkListeners[chunkId]) return;
+        ref.on(eventType, callback);
+        firebaseChunkListeners[chunkId].push({ ref, eventType, callback });
+    }
+    
+    // --- Firebase Listeners (Per Chunk) ---
+
+    function listenForUsersInChunk(chunkId) {
+        const usersQuery = db.ref('online_users').orderByChild('chunkId').equalTo(chunkId);
+        
+        const onUserAdded = snapshot => {
             const peerId = snapshot.key;
             const peerUser = snapshot.val();
             if (peerId !== userId) {
                  world.addOrUpdateRemotePlayer(peerId, peerUser);
-                 initPeerConnection(peerId, false);
             }
-        });
+        };
+        addListener(chunkId, usersQuery, 'child_added', onUserAdded);
         
-        usersRef.on('child_changed', snapshot => {
+        const onUserChanged = snapshot => {
             const peerId = snapshot.key;
             const peerData = snapshot.val();
             if (peerId !== userId) {
@@ -341,43 +430,71 @@ document.addEventListener('DOMContentLoaded', () => {
             } else { 
                  if (peerData.chatMessage && world.player) {
                     world.displayChatMessage(world.player, peerData.chatMessage.text);
-                    roomUserRef.child('chatMessage').remove();
+                    selfUserRef.child('chatMessage').remove();
                  }
             }
-        });
+        };
+        addListener(chunkId, usersQuery, 'child_changed', onUserChanged);
         
-        usersRef.on('child_removed', snapshot => {
+        const onUserRemoved = snapshot => {
              const peerId = snapshot.key;
              world?.removeRemotePlayer(peerId);
-             if (peerConnections[peerId]) {
-                peerConnections[peerId].close();
-                delete peerConnections[peerId];
-            }
-            if(dataChannels[peerId]) delete dataChannels[peerId];
-             if (firebaseListeners[peerId]) {
-                firebaseListeners[peerId].forEach(l => l.ref.off(l.eventType, l.callback));
-                delete firebaseListeners[peerId];
-            }
+        };
+        addListener(chunkId, usersQuery, 'child_removed', onUserRemoved);
+
+        usersQuery.once('value', snapshot => {
+            usersInRoomList.innerHTML = ''; 
+            snapshot.forEach(childSnapshot => {
+                const user = childSnapshot.val();
+                const li = document.createElement('li');
+                li.textContent = `${user.username}${childSnapshot.key === userId ? ' (Tú)' : ''}`;
+                usersInRoomList.appendChild(li);
+            });
         });
     }
 
-    // --- World Callbacks ---
-    function onPlayerMove(position, quaternion) {
-        if (roomUserRef) {
-            roomUserRef.update({ 
-                position: { x: position.x, y: position.y, z: position.z },
-                quaternion: { _x: quaternion.x, _y: quaternion.y, _z: quaternion.z, _w: quaternion.w }
-            });
-        }
-    }
+    function listenForWorldObjects(chunkId) {
+        const objectsRef = db.ref(`world_data/${chunkId}/world_objects`);
+        
+        const onObjectAdded = snapshot => {
+            world?.addDynamicObject(snapshot.key, snapshot.val(), chunkId);
+        };
+        addListener(chunkId, objectsRef, 'child_added', onObjectAdded);
 
-    function onDoorClicked(doorData) {
-        changeRoom(doorData.to);
+        const onObjectChanged = snapshot => {
+            world?.updateDynamicObject(snapshot.key, snapshot.val());
+        };
+        addListener(chunkId, objectsRef, 'child_changed', onObjectChanged);
+
+        const onObjectRemoved = snapshot => {
+            world?.removeDynamicObject(snapshot.key);
+        };
+        addListener(chunkId, objectsRef, 'child_removed', onObjectRemoved);
     }
+    
+    function listenForConstructionSites(chunkId) {
+        const sitesRef = db.ref(`world_data/${chunkId}/construction_sites`);
+
+        const onSiteAdded = snapshot => {
+            world?.createConstructionSite(snapshot.key, snapshot.val(), chunkId);
+        };
+        addListener(chunkId, sitesRef, 'child_added', onSiteAdded);
+
+        const onSiteChanged = snapshot => {
+            world?.updateConstructionSite(snapshot.key, snapshot.val());
+        };
+        addListener(chunkId, sitesRef, 'child_changed', onSiteChanged);
+
+        const onSiteRemoved = snapshot => {
+            world?.removeConstructionSite(snapshot.key);
+        };
+        addListener(chunkId, sitesRef, 'child_removed', onSiteRemoved);
+    }
+    
+    // --- Player Actions & UI ---
 
     function onPlayerClicked() {
         groundActionModal.style.display = 'flex';
-        // Enable place object button if there are placeable items
         const hasPlaceable = Object.keys(playerInventory).some(id => itemData[id]?.placeable);
         actionPlaceObjectButton.disabled = !hasPlaceable;
     }
@@ -385,94 +502,41 @@ document.addEventListener('DOMContentLoaded', () => {
     function onInteractiveObjectClick(objectData) {
         if (objectData.id === 'fountain') {
             fountainModal.style.display = 'flex';
-        } else if (objectData.isPlacedObject && objectData.itemId === 'pine_seed') {
-            // Logic for interacting with a placed pine seed
+        } 
+        else if (objectData.isPlacedObject && objectData.itemId === 'pine_seed') {
             pineSeedModal.style.display = 'flex';
-            // We'll need to pass the unique ID of the clicked seed to the watering function
-            waterSeedButton.onclick = () => waterPineSeed(objectData.uniqueId);
+            waterSeedButton.onclick = () => waterPineSeed(objectData.uniqueId, objectData.chunkId);
+        }
+        else if (objectData.isPlacedObject && objectData.itemId === 'pine_sprout') {
+            pineSproutInfoModal.style.display = 'flex';
+        }
+        else if (objectData.isPlacedObject && objectData.itemId === 'pine') {
+            pineActionModal.style.display = 'flex';
+            chopPineButton.onclick = () => chopPine(objectData.uniqueId, objectData.chunkId);
+            leavePineButton.onclick = () => pineActionModal.style.display = 'none';
+        }
+        else if (objectData.id === 'construction_sign') {
+            showConstructionSignModal(objectData.siteId, objectData.siteSize, objectData.chunkId);
+        }
+        else if (objectData.id === 'house_door') {
+            showHouseDoorModal(objectData);
         }
     }
     
-    // --- Chat Functionality ---
     function sendChatMessage() {
         const message = chatMessageInput.value.trim();
-        if (message && roomUserRef) {
+        if (message && selfUserRef) {
             const chatData = {
                 text: message,
                 timestamp: firebase.database.ServerValue.TIMESTAMP
             };
-            roomUserRef.child('chatMessage').set(chatData);
+            selfUserRef.child('chatMessage').set(chatData);
             
             chatMessageInput.value = '';
             chatInputModal.style.display = 'none';
         }
     }
-            
-    // --- WebRTC Signaling ---
-    function initPeerConnection(peerId, isInitiator) {
-        if (peerConnections[peerId] || peerId === userId) return;
-        const pc = new RTCPeerConnection(rtcConfig);
-        peerConnections[peerId] = pc;
-        setupPeerSignalingListeners(peerId);
-        
-        pc.onicecandidate = e => {
-            if (e.candidate) db.ref(`signaling/${peerId}/${userId}/iceCandidates`).push(e.candidate.toJSON());
-        };
-        
-        if (isInitiator) {
-            const channel = pc.createDataChannel('data');
-            setupDataChannel(peerId, channel);
-            pc.createOffer()
-                .then(offer => pc.setLocalDescription(offer))
-                .then(() => db.ref(`signaling/${peerId}/${userId}/offer`).set(pc.localDescription.toJSON()));
-        } else {
-            pc.ondatachannel = e => setupDataChannel(peerId, e.channel);
-        }
-    }
-
-    function setupDataChannel(peerId, channel) {
-        dataChannels[peerId] = channel;
-    }
-
-    function setupPeerSignalingListeners(peerId) {
-        if(firebaseListeners[peerId]) return;
-        firebaseListeners[peerId] = [];
-        const offerRef = db.ref(`signaling/${userId}/${peerId}/offer`);
-        const answerRef = db.ref(`signaling/${userId}/${peerId}/answer`);
-        const iceRef = db.ref(`signaling/${userId}/${peerId}/iceCandidates`);
-
-        const offerCallback = async snapshot => {
-            if (!snapshot.val()) return;
-            const pc = peerConnections[peerId];
-            if (!pc || pc.signalingState !== 'stable') return;
-            await pc.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            db.ref(`signaling/${peerId}/${userId}/answer`).set(pc.localDescription.toJSON());
-        };
-        offerRef.on('value', offerCallback);
-        firebaseListeners[peerId].push({ref: offerRef, eventType: 'value', callback: offerCallback});
-
-        const answerCallback = async snapshot => {
-            if (!snapshot.val()) return;
-            const pc = peerConnections[peerId];
-            if (pc && pc.signalingState !== 'stable') {
-               await pc.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
-            }
-        };
-        answerRef.on('value', answerCallback);
-        firebaseListeners[peerId].push({ref: answerRef, eventType: 'value', callback: answerCallback});
-
-        const iceCallback = snapshot => {
-            if (!snapshot.val()) return;
-            snapshot.ref.remove(); 
-            peerConnections[peerId]?.addIceCandidate(new RTCIceCandidate(snapshot.val()));
-        };
-        iceRef.on('child_added', iceCallback);
-        firebaseListeners[peerId].push({ref: iceRef, eventType: 'child_added', callback: iceCallback});
-    }
-
-    // --- Inventory & Item Management ---
+    
     function getItemName(itemId) {
         return itemData[itemId]?.name || itemId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
@@ -483,7 +547,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         playerInventory[itemId].count += quantity;
         updateInventoryTab();
-        savePlayerState();
     }
 
     function removeItemFromInventory(itemId, quantity) {
@@ -493,7 +556,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete playerInventory[itemId];
             }
             updateInventoryTab();
-            savePlayerState();
             return true;
         }
         return false;
@@ -539,53 +601,225 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function placeObject(itemId) {
-        if (!world.localPlayerTargetPosition) {
-            // In a real game, you'd provide feedback here
-            console.log("Selecciona una ubicación en el suelo primero.");
+        if (!lastClickedGroundPosition) {
+            showNotification("Ubicación requerida", "Primero haz clic en el suelo donde quieras colocar el objeto, y después selecciona el objeto a colocar.");
+            placeObjectModal.style.display = 'none';
             return;
         }
 
         if (removeItemFromInventory(itemId, 1)) {
-            const position = {
-                x: world.localPlayerTargetPosition.x,
-                y: 0.5, // Place on the ground
-                z: world.localPlayerTargetPosition.z
-            };
-
+            const objectChunkId = getChunkIdFromPosition(lastClickedGroundPosition);
+            
             const newObjectData = {
                 itemId: itemId,
-                position: position,
-                state: 'default' // Initial state
+                position: { 
+                    x: lastClickedGroundPosition.x,
+                    z: lastClickedGroundPosition.z
+                },
+                state: 'default'
             };
 
-            // Save to a new 'world_objects' node for the room
-            db.ref(`rooms/${currentRoomId}/world_objects`).push(newObjectData);
+            db.ref(`world_data/${objectChunkId}/world_objects`).push(newObjectData);
             placeObjectModal.style.display = 'none';
+            
+            lastClickedGroundPosition = null; 
         }
     }
     
-    function waterPineSeed(placedObjectKey) {
-        // Check if player has a water bottle
+    function waterPineSeed(placedObjectKey, chunkId) {
         if (playerInventory['water_bottle'] && playerInventory['water_bottle'].count > 0) {
-            // Consume water bottle
             removeItemFromInventory('water_bottle', 1);
 
-            // Update the placed object in Firebase
-            const objectRef = db.ref(`rooms/${currentRoomId}/world_objects/${placedObjectKey}`);
+            const objectRef = db.ref(`world_data/${chunkId}/world_objects/${placedObjectKey}`);
             objectRef.update({
-                itemId: 'pine_sprout', // Change the item type
-                state: 'watered'
+                itemId: 'pine_sprout',
+                state: 'watered',
+                growthStartTime: firebase.database.ServerValue.TIMESTAMP
             });
 
             pineSeedModal.style.display = 'none';
         } else {
-            // You can show a message to the user here
-            console.log("No tienes botellas de agua.");
+            showNotification("Sin agua", "No tienes botellas de agua para regar la semilla.");
+            pineSeedModal.style.display = 'none';
         }
     }
 
+    function chopPine(placedObjectKey, chunkId) {
+        pineActionModal.style.display = 'none';
+    
+        if (playerInventory['hacha'] && playerInventory['hacha'].count > 0) {
+            db.ref(`world_data/${chunkId}/world_objects/${placedObjectKey}`).remove();
+            addItemToInventory('tronco_pino', 3);
+            showNotification("¡Has talado el pino!", "Has conseguido 3 troncos de pino.");
+        } else {
+            showNotification("Herramienta necesaria", "Necesitas un hacha para talar este pino.");
+        }
+    }
 
-    // --- Player Menu Tab Management ---
+    function checkPassiveObjectsGrowth() {
+        if (!activeChunks.size) return;
+
+        const currentTime = Date.now();
+        
+        activeChunks.forEach(chunkId => {
+            const objectsRef = db.ref(`world_data/${chunkId}/world_objects`);
+            objectsRef.once('value', snapshot => {
+                const objects = snapshot.val();
+                if (!objects) return;
+
+                Object.entries(objects).forEach(([key, objectData]) => {
+                    if (objectData.itemId === 'pine_sprout' && objectData.growthStartTime) {
+                        const growthDuration = 20000; // 20 seconds
+                        if (currentTime > objectData.growthStartTime + growthDuration) {
+                            const grownPineRef = db.ref(`world_data/${chunkId}/world_objects/${key}`);
+                            grownPineRef.update({
+                                itemId: 'pine',
+                                state: 'grown',
+                                growthStartTime: null
+                            });
+                        }
+                    }
+                });
+            });
+        });
+    }
+
+    function handleBuildSizeSelection(event) {
+        if (!world) return;
+        selectedBuildSize = event.target.value;
+        const [width, height] = selectedBuildSize.split('x').map(Number);
+        
+        const playerPosition = world.getPlayerPosition();
+        const areaBounds = {
+            x: playerPosition.x,
+            z: playerPosition.z,
+            width: width,
+            height: height
+        };
+
+        world.drawBuildPreview(areaBounds);
+        const isAreaClear = world.checkObjectsInArea(areaBounds);
+        
+        if (isAreaClear) {
+            world.setBuildPreviewColor(0x00ff00); // Green
+            confirmBuildButton.disabled = false;
+            buildAreaStatus.style.display = 'none';
+        } else {
+            world.setBuildPreviewColor(0xff0000); // Red
+            confirmBuildButton.disabled = true;
+            buildAreaStatus.textContent = "El área no está despejada. Mueve los objetos o elige otra zona.";
+            buildAreaStatus.style.display = 'block';
+        }
+    }
+
+    function handleConfirmBuild() {
+        if (!world || !selectedBuildSize) return;
+
+        const [width, height] = selectedBuildSize.split('x').map(Number);
+        const playerPosition = world.getPlayerPosition();
+        const siteChunkId = getChunkIdFromPosition(playerPosition);
+
+        const areaData = {
+            center: {
+                x: playerPosition.x,
+                z: playerPosition.z
+            },
+            size: {
+                width: width,
+                height: height
+            },
+            owner: userId,
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            structure: 'none',
+            doorState: 'closed'
+        };
+
+        db.ref(`world_data/${siteChunkId}/construction_sites`).push(areaData);
+        
+        buildAreaModal.style.display = 'none';
+        world.clearBuildPreview();
+        showNotification("¡Éxito!", "Has preparado una nueva zona de obras.");
+    }
+    
+    function showConstructionSignModal(siteId, siteSize, chunkId) {
+        activeConstructionSiteId = siteId;
+        constructionOptionsDiv.innerHTML = '';
+
+        if (siteSize.width === 14 && siteSize.height === 7) {
+            const buildHouseButton = document.createElement('button');
+            buildHouseButton.id = 'action-build-house';
+            buildHouseButton.textContent = 'Construir Casa';
+            buildHouseButton.onclick = () => handleBuildHouse(chunkId);
+            constructionOptionsDiv.appendChild(buildHouseButton);
+        }
+        
+        const doNothingButton = document.createElement('button');
+        doNothingButton.textContent = 'Nada';
+        doNothingButton.onclick = () => { constructionSignModal.style.display = 'none'; };
+        constructionOptionsDiv.appendChild(doNothingButton);
+
+        constructionSignModal.style.display = 'flex';
+    }
+
+    function handleBuildHouse(chunkId) {
+        if (activeConstructionSiteId) {
+            db.ref(`world_data/${chunkId}/construction_sites/${activeConstructionSiteId}`).update({
+                structure: 'house_14x7'
+            });
+            constructionSignModal.style.display = 'none';
+            showNotification("Construyendo...", "Tu casa se está construyendo.");
+        }
+    }
+
+    function showHouseDoorModal(data) {
+        activeHouseDoorData = data;
+        houseOwnerInfo.textContent = `Esta es la casa de ${data.owner}.`;
+        houseDoorOptions.innerHTML = '';
+
+        if (data.owner === userId) {
+            const toggleDoorButton = document.createElement('button');
+            toggleDoorButton.textContent = 'Abrir/Cerrar Puerta';
+            toggleDoorButton.onclick = toggleHouseDoor;
+            houseDoorOptions.appendChild(toggleDoorButton);
+
+            const enterStealthButton = document.createElement('button');
+            enterStealthButton.textContent = 'Entrar sin abrir';
+            enterStealthButton.onclick = enterHouseStealth;
+            houseDoorOptions.appendChild(enterStealthButton);
+        }
+
+        const closeButton = document.createElement('button');
+        closeButton.textContent = 'Nada';
+        closeButton.onclick = () => { houseDoorModal.style.display = 'none'; };
+        houseDoorOptions.appendChild(closeButton);
+
+        houseDoorModal.style.display = 'flex';
+    }
+
+
+    function toggleHouseDoor() {
+        if (!activeHouseDoorData) return;
+        const doorRef = db.ref(`world_data/${activeHouseDoorData.chunkId}/construction_sites/${activeHouseDoorData.siteId}/doorState`);
+        doorRef.once('value', snapshot => {
+            const currentState = snapshot.val();
+            const newState = currentState === 'closed' ? 'open' : 'closed';
+            doorRef.set(newState);
+        });
+        houseDoorModal.style.display = 'none';
+    }
+
+    function enterHouseStealth() {
+        if (!activeHouseDoorData || !world) return;
+        world.teleportPlayerIntoHouse(activeHouseDoorData.siteId);
+        houseDoorModal.style.display = 'none';
+    }
+
+    function showNotification(title, text) {
+        notificationTitle.textContent = title;
+        notificationText.textContent = text;
+        notificationModal.style.display = 'flex';
+    }
+
     function showPlayerMenuTab(tabName) {
         playerMenuTabButtons.forEach(button => button.classList.remove('active'));
         playerMenuContentDivs.forEach(div => div.classList.remove('active'));
@@ -629,7 +863,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (itemAsset) {
                 const itemDiv = document.createElement('div');
                 itemDiv.className = 'inventory-item';
-                itemDiv.dataset.itemId = itemId; // Store item ID
+                itemDiv.dataset.itemId = itemId;
                 itemDiv.innerHTML = `
                     <img src="${itemAsset}" alt="${getItemName(itemId)}" onerror="this.src='https://placehold.co/80x80/555/fff?text=?'">
                     <p class="item-name">${getItemName(itemId)}</p>
