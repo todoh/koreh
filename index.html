@@ -29,6 +29,8 @@
 
     <div class="container">
         <div id="world-view" class="view">
+            <!-- Contenedor para el minimapa -->
+            <div id="minimap-container"></div>
             <h2 id="room-name" style="display: none;" ></h2>
             <div id="threejs-container"></div>
             <button id="menu-button" title="Abrir Menú">☰</button>
@@ -40,7 +42,7 @@
                     <button id="zoom-in-button" title="Acercar">+</button>
                     <button id="zoom-out-button" title="Alejar">-</button>
                 </div>
-                <div id="user-list-container">
+                <div id="user-list-container"  style="display: none;">
                     <h3 id="user-list-toggle">Usuarios en la sala:</h3>
                     <ul id="users-in-room"></ul>
                 </div>
@@ -247,6 +249,10 @@
     </script>
 
     <script type="module" src="world-data.js"></script>
+    <!-- Cargar el script del minimapa ANTES de main.js -->
+    <script type="module" src="minimap.js"></script>
+        <script type="module" src="modelos3d.js"></script>
+
     <script type="module" src="main.js"></script>
     <script type="module" src="login-sphere.js"></script>
 

@@ -172,6 +172,37 @@ button:disabled {
     display: block;
 }
 
+/* Estilos para el minimapa */
+#minimap-container {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 100;
+    border: 2px solid rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.4);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    /* --- NUEVO: Transición suave --- */
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    cursor: pointer;
+}
+
+/* --- NUEVO: Estilo para el estado ampliado --- */
+#minimap-container.zoomed {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-width: 4px;
+    border-color: rgba(255, 255, 255, 1);
+    z-index: 1100; /* Asegurarse de que está por encima de otros elementos UI */
+}
+
+#minimap-container canvas {
+    display: block;
+}
+
+
 #room-name {
     position: absolute;
     top: 10px;

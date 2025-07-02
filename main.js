@@ -1,5 +1,6 @@
 import { World } from './world.js';
 import { assetLibrary, itemData, worldGridData } from './world-data.js';
+import { Minimap } from './minimap.js'; // Importar la clase Minimap
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Firebase Configuration ---
@@ -35,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let persistentUserRef = null;
     let selfUserRef = null; // Reference to the user's own data in the global list
     let world = null;
+    let minimap = null; // Variable para el minimapa
     let playerStats = {
         level: 1, health: 100, maxHealth: 100, energy: 50, maxEnergy: 50, xp: 0, maxXp: 100
     };
@@ -57,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const userListToggle = document.getElementById('user-list-toggle');
     const leaveRoomButton = document.getElementById('leave-room-button');
     const threejsContainer = document.getElementById('threejs-container');
+    const minimapContainer = document.getElementById('minimap-container'); // Contenedor del minimapa
     const zoomInButton = document.getElementById('zoom-in-button');
     const zoomOutButton = document.getElementById('zoom-out-button');
     const menuButton = document.getElementById('menu-button');
@@ -219,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 const initialInventory = { 'welcome_note': { count: 1 }, 'hacha': { count: 1 }, 'water_bottle': { count: 1 }, 'pine_seed': { count: 5 } };
                 const initialGameState = {
-                    position: { x: 0, y: 1.75, z: 0 }, 
+                    position: { x: 0, y: 0, z: 0 }, 
                     avatar: 'ronin',
                     inventory: initialInventory,
                     stats: { level: 1, health: 100, maxHealth: 100, energy: 50, maxEnergy: 50, xp: 0, maxXp: 100 }
@@ -240,6 +243,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Initialize the world
         world = new World(threejsContainer, onPlayerMove, onInteractiveObjectClick, onPlayerClicked, onGroundClicked, CHUNK_SIZE);
         world.init(currentAvatar, username, gameState.position);
+
+        // Inicializar el minimapa
+        minimap = new Minimap(minimapContainer, worldGridData, CHUNK_SIZE);
+        minimap.updatePlayerPosition(world.getPlayerPosition());
 
         // Set up global user presence
         selfUserRef = db.ref('online_users/' + userId);
@@ -301,6 +308,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (passiveObjectsInterval) clearInterval(passiveObjectsInterval);
 
+        // Destruir el minimapa
+        if (minimap) {
+            minimap.destroy();
+            minimap = null;
+        }
+
         world?.dispose();
         world = null;
         
@@ -321,6 +334,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 quaternion: { _x: quaternion.x, _y: quaternion.y, _z: quaternion.z, _w: quaternion.w },
                 chunkId: newChunkId
             });
+        }
+        // Actualizar la posición del jugador en el minimapa
+        if (minimap) {
+            minimap.updatePlayerPosition(position);
         }
     }
 
@@ -749,10 +766,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const buildHouseButton = document.createElement('button');
             buildHouseButton.id = 'action-build-house';
             buildHouseButton.textContent = 'Construir Casa';
-            buildHouseButton.onclick = () => handleBuildHouse(chunkId);
+            buildHouseButton.onclick = () => handleBuildStructure('house_14x7', chunkId);
             constructionOptionsDiv.appendChild(buildHouseButton);
         }
         
+        if (siteSize.width === 5 && siteSize.height === 5) {
+            const buildPoolButton = document.createElement('button');
+            buildPoolButton.id = 'action-build-pool';
+            buildPoolButton.textContent = 'Construir Piscina';
+            buildPoolButton.onclick = () => handleBuildStructure('pool_5x5', chunkId);
+            constructionOptionsDiv.appendChild(buildPoolButton);
+        }
+
         const doNothingButton = document.createElement('button');
         doNothingButton.textContent = 'Nada';
         doNothingButton.onclick = () => { constructionSignModal.style.display = 'none'; };
@@ -761,13 +786,14 @@ document.addEventListener('DOMContentLoaded', () => {
         constructionSignModal.style.display = 'flex';
     }
 
-    function handleBuildHouse(chunkId) {
+    function handleBuildStructure(structureType, chunkId) {
         if (activeConstructionSiteId) {
             db.ref(`world_data/${chunkId}/construction_sites/${activeConstructionSiteId}`).update({
-                structure: 'house_14x7'
+                structure: structureType
             });
             constructionSignModal.style.display = 'none';
-            showNotification("Construyendo...", "Tu casa se está construyendo.");
+            const typeText = structureType.includes('house') ? 'casa' : 'piscina';
+            showNotification("Construyendo...", `Tu ${typeText} se está construyendo.`);
         }
     }
 
